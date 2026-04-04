@@ -1,0 +1,63 @@
+import { notFound } from "next/navigation";
+import Link from "next/link";
+import { initialPosts } from "@/data/posts";
+import Header from "@/components/Header";
+import Footer from "@/components/Footer";
+import AdSenseUnit from "@/components/AdSenseUnit";
+import ThreadClient from "./ThreadClient";
+
+export function generateStaticParams() {
+  return initialPosts.map((post) => ({ postId: String(post.id) }));
+}
+
+export default function PostPage({ params }: { params: { postId: string } }) {
+  const postId = Number(params.postId);
+  const post = initialPosts.find((p) => p.id === postId);
+
+  if (!post) return notFound();
+
+  return (
+    <>
+      <Header />
+      <main className="bg-[#f8fafb] min-h-screen pt-20 pb-12 px-4">
+        <div className="max-w-2xl mx-auto">
+          {/* Back link */}
+          <Link
+            href="/"
+            className="inline-flex items-center gap-1 text-sm text-teal-600 hover:text-teal-700 mb-6 transition-colors"
+          >
+            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+            </svg>
+            広場に戻る
+          </Link>
+
+          {/* Original post (large) */}
+          <div className="bg-white rounded-xl p-6 border border-gray-200 shadow-sm mb-4">
+            <div className="flex items-center gap-3 mb-3">
+              <div className="w-10 h-10 rounded-full bg-teal-100 flex items-center justify-center text-teal-600 text-sm font-bold">
+                {post.name[0]}
+              </div>
+              <div>
+                <span className="text-sm text-gray-700 font-medium">{post.name}</span>
+                <span className="text-xs text-gray-400 ml-3">{post.time}</span>
+              </div>
+            </div>
+            <p className="text-gray-700 text-base leading-relaxed mb-4">{post.body}</p>
+            <div className="flex items-center gap-1.5 text-sm text-gray-400">
+              <span>♡</span>
+              <span>{post.likes}</span>
+            </div>
+          </div>
+
+          {/* AdSense ad between post and replies */}
+          <AdSenseUnit className="mb-4" />
+
+          {/* Replies + reply form (client component) */}
+          <ThreadClient postId={postId} body={post.body} initialReplies={post.replies || []} />
+        </div>
+      </main>
+      <Footer />
+    </>
+  );
+}

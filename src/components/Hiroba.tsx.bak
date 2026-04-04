@@ -1,0 +1,120 @@
+"use client";
+
+import { useState, useEffect } from "react";
+import Link from "next/link";
+import { initialPosts, type Post } from "@/data/posts";
+
+export default function Hiroba() {
+  const [posts, setPosts] = useState<Post[]>(initialPosts);
+  const [input, setInput] = useState("");
+  const [nextId, setNextId] = useState(100);
+  const [newPostIds, setNewPostIds] = useState<Set<number>>(new Set());
+
+  const handlePost = () => {
+    const text = input.trim();
+    if (!text) return;
+    const newId = nextId;
+    setPosts((prev) => [
+      { id: newId, name: "にんげんさん", body: text, time: "たった今", likes: 0, liked: false, replies: [] },
+      ...prev,
+    ]);
+    setNewPostIds((prev) => new Set(prev).add(newId));
+    setNextId(nextId + 1);
+    setInput("");
+  };
+
+  // Remove new-post highlight after animation
+  useEffect(() => {
+    if (newPostIds.size === 0) return;
+    const timer = setTimeout(() => setNewPostIds(new Set()), 600);
+    return () => clearTimeout(timer);
+  }, [newPostIds]);
+
+  const toggleLike = (id: number, e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setPosts(posts.map((p) =>
+      p.id === id
+        ? { ...p, liked: !p.liked, likes: p.liked ? p.likes - 1 : p.likes + 1 }
+        : p
+    ));
+  };
+
+  return (
+    <div className="max-w-2xl mx-auto">
+      {/* Rule banner */}
+      <div className="mb-4 flex items-center gap-2 px-4 py-2.5 rounded-lg bg-teal-50 border border-teal-200">
+        <span className="text-teal-600 text-sm">唯一のルール：</span>
+        <span className="text-gray-700 text-sm font-medium">悪口禁止</span>
+        <span className="text-gray-400 text-xs ml-auto hidden sm:block">同調と対話の場です</span>
+      </div>
+
+      {/* Post input */}
+      <div className="mb-6 bg-white rounded-xl p-4 border border-gray-200 shadow-sm">
+        <textarea
+          value={input}
+          onChange={(e) => setInput(e.target.value)}
+          placeholder="いま感じていることを書いてみる..."
+          className="w-full bg-transparent text-gray-700 placeholder-gray-400 resize-none outline-none text-sm leading-relaxed"
+          rows={3}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) handlePost();
+          }}
+        />
+        <div className="flex items-center justify-between mt-2">
+          <span className="text-xs text-gray-400">投稿名: にんげんさん</span>
+          <button
+            onClick={handlePost}
+            disabled={!input.trim()}
+            className="px-4 py-1.5 text-sm rounded-lg bg-teal-500 hover:bg-teal-600 text-white transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+          >
+            投稿する
+          </button>
+        </div>
+      </div>
+
+      {/* Timeline */}
+      <div className="space-y-4">
+        {posts.map((post) => (
+          <Link
+            key={post.id}
+            href={`/posts/${post.id}`}
+            className={`block bg-white rounded-xl p-4 border border-gray-200 shadow-sm transition-all duration-500 hover:border-teal-200 hover:shadow-md ${
+              newPostIds.has(post.id) ? "ring-2 ring-teal-300 animate-pulse" : ""
+            }`}
+          >
+            <div className="flex items-center gap-3 mb-2">
+              <div className="w-8 h-8 rounded-full bg-teal-100 flex items-center justify-center text-teal-600 text-xs font-bold">
+                {post.name[0]}
+              </div>
+              <span className="text-sm text-gray-700 font-medium">{post.name}</span>
+              <span className="text-xs text-gray-400 ml-auto">{post.time}</span>
+            </div>
+            <p className="text-gray-600 text-sm leading-relaxed mb-3">{post.body}</p>
+
+            {/* Footer: likes + reply count */}
+            <div className="flex items-center gap-4">
+              <button
+                onClick={(e) => toggleLike(post.id, e)}
+                className={`flex items-center gap-1.5 text-sm transition-colors ${
+                  post.liked ? "text-pink-400" : "text-gray-400 hover:text-pink-400"
+                }`}
+              >
+                <span>{post.liked ? "♥" : "♡"}</span>
+                <span>{post.likes}</span>
+              </button>
+              {post.replies && post.replies.length > 0 && (
+                <span className="flex items-center gap-1 text-sm text-gray-400">
+                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+                  </svg>
+                  {post.replies.length}
+                </span>
+              )}
+            </div>
+          </Link>
+        ))}
+      </div>
+    </div>
+  );
+}
