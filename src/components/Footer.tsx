@@ -12,7 +12,7 @@ export default function Footer() {
           <div className="flex gap-5 text-[12px] text-gray-400">
             <Link href="/terms" className="hover:text-gray-700 transition-colors">利用規約</Link>
             <Link href="/privacy" className="hover:text-gray-700 transition-colors">プライバシーポリシー</Link>
-            <a href="mailto:hello@ibasho.co.jp" className="hover:text-gray-700 transition-colors">お問い合わせ</a>
+            <a href="#" className="hover:text-gray-700 transition-colors">お問い合わせ</a>
           </div>
         </div>
         <div className="border-t border-gray-100 pt-5 text-center">

@@ -1,28 +1,44 @@
 "use client";
 
-import { useState } from "react";
-import type { Reply } from "@/data/posts";
+import { useState, useEffect } from "react";
 import ShareButtons from "@/components/ShareButtons";
+import { timeAgo } from "@/lib/utils";
 
-interface ThreadClientProps {
-  postId: number;
+interface Reply {
+  id: string;
+  name: string;
   body: string;
-  initialReplies: Reply[];
+  created_at: string;
 }
 
-export default function ThreadClient({ postId, body, initialReplies }: ThreadClientProps) {
-  const [replies, setReplies] = useState<Reply[]>(initialReplies);
-  const [replyInput, setReplyInput] = useState("");
-  const [nextReplyId, setNextReplyId] = useState(
-    Math.max(...initialReplies.map((r) => r.id), postId * 100) + 1
-  );
+interface ThreadClientProps {
+  postId: string;
+  body: string;
+}
 
-  const handleReply = () => {
+export default function ThreadClient({ postId, body }: ThreadClientProps) {
+  const [replies, setReplies] = useState<Reply[]>([]);
+  const [replyInput, setReplyInput] = useState("");
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    fetch(`/api/posts/${postId}/replies`)
+      .then((r) => r.json())
+      .then((data) => { if (Array.isArray(data)) setReplies(data); })
+      .finally(() => setLoading(false));
+  }, [postId]);
+
+  const handleReply = async () => {
     const text = replyInput.trim();
     if (!text) return;
-    const newReply: Reply = { id: nextReplyId, name: "にんげんさん", body: text, time: "たった今" };
+    const res = await fetch(`/api/posts/${postId}/replies`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ body: text }),
+    });
+    if (!res.ok) return;
+    const newReply: Reply = await res.json();
     setReplies((prev) => [...prev, newReply]);
-    setNextReplyId(nextReplyId + 1);
     setReplyInput("");
   };
 
@@ -30,11 +46,11 @@ export default function ThreadClient({ postId, body, initialReplies }: ThreadCli
     <>
       {/* Share */}
       <div className="flex items-center justify-between mb-6 pb-4 border-b border-gray-100">
-        <ShareButtons postId={postId} body={body} />
+        <ShareButtons postId={Number(postId)} body={body} />
       </div>
 
       {/* Replies */}
-      {replies.length > 0 && (
+      {!loading && replies.length > 0 && (
         <div className="mb-6">
           <h3 className="text-[12px] font-semibold text-gray-400 mb-3 uppercase tracking-wide">
             返信 {replies.length}件
@@ -47,13 +63,16 @@ export default function ThreadClient({ postId, body, initialReplies }: ThreadCli
                     {reply.name[0]}
                   </div>
                   <span className="text-[12px] text-gray-600 font-semibold">{reply.name}</span>
-                  <span className="text-[10px] text-gray-400">{reply.time}</span>
+                  <span className="text-[10px] text-gray-400">{timeAgo(reply.created_at)}</span>
                 </div>
                 <p className="text-gray-600 text-[13px] leading-relaxed ml-8">{reply.body}</p>
               </div>
             ))}
           </div>
         </div>
+      )}
+      {loading && (
+        <div className="text-center py-8 text-gray-400 text-sm mb-6">読み込み中...</div>
       )}
 
       {/* Reply form */}

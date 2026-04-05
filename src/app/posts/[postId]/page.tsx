@@ -1,20 +1,32 @@
-import { notFound } from "next/navigation";
 import Link from "next/link";
-import { initialPosts } from "@/data/posts";
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
 import AdSenseUnit from "@/components/AdSenseUnit";
 import ThreadClient from "./ThreadClient";
 
-export function generateStaticParams() {
-  return initialPosts.map((post) => ({ postId: String(post.id) }));
+export const dynamic = 'force-dynamic';
+
+async function getPost(postId: string) {
+  const baseUrl = process.env.NEXT_PUBLIC_APP_URL ?? 'https://ibasho.co.jp';
+  const res = await fetch(`${baseUrl}/api/posts/${postId}`, { cache: 'no-store' });
+  if (!res.ok) return null;
+  return res.json();
 }
 
-export default function PostPage({ params }: { params: { postId: string } }) {
-  const postId = Number(params.postId);
-  const post = initialPosts.find((p) => p.id === postId);
+export default async function PostPage({ params }: { params: { postId: string } }) {
+  const post = await getPost(params.postId);
 
-  if (!post) return notFound();
+  if (!post) {
+    return (
+      <>
+        <Header />
+        <main className="bg-[#f8fafb] min-h-screen pt-20 pb-12 px-4">
+          <div className="max-w-2xl mx-auto text-center py-20 text-gray-400">投稿が見つかりません</div>
+        </main>
+        <Footer />
+      </>
+    );
+  }
 
   return (
     <>
@@ -40,13 +52,12 @@ export default function PostPage({ params }: { params: { postId: string } }) {
               </div>
               <div>
                 <span className="text-sm text-gray-700 font-medium">{post.name}</span>
-                <span className="text-xs text-gray-400 ml-3">{post.time}</span>
               </div>
             </div>
             <p className="text-gray-700 text-base leading-relaxed mb-4">{post.body}</p>
             <div className="flex items-center gap-1.5 text-sm text-gray-400">
               <span>♡</span>
-              <span>{post.likes}</span>
+              <span>{post.likes ?? 0}</span>
             </div>
           </div>
 
@@ -54,7 +65,7 @@ export default function PostPage({ params }: { params: { postId: string } }) {
           <AdSenseUnit className="mb-4" />
 
           {/* Replies + reply form (client component) */}
-          <ThreadClient postId={postId} body={post.body} initialReplies={post.replies || []} />
+          <ThreadClient postId={params.postId} body={post.body} />
         </div>
       </main>
       <Footer />
