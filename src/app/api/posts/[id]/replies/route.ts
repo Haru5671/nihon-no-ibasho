@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
+import { checkModeration } from '@/lib/moderate';
 
 function db() {
   return createClient(
@@ -23,6 +24,11 @@ export async function POST(req: Request, { params }: { params: { id: string } })
   const { body } = await req.json();
   if (!body?.trim()) {
     return NextResponse.json({ error: 'body is required' }, { status: 400 });
+  }
+
+  const mod = checkModeration(body.trim());
+  if (!mod.ok) {
+    return NextResponse.json({ error: mod.reason }, { status: 422 });
   }
 
   const { data, error } = await db()

@@ -25,6 +25,7 @@ export default function Hiroba({ defaultTopic }: { defaultTopic?: Topic }) {
   const [postTopic, setPostTopic] = useState<Topic>("なんでも");
   const [newPostIds, setNewPostIds] = useState<Set<string>>(new Set());
   const [loading, setLoading] = useState(true);
+  const [postError, setPostError] = useState<string | null>(null);
 
   useEffect(() => {
     if (defaultTopic) setSelectedTopic(defaultTopic);
@@ -42,12 +43,17 @@ export default function Hiroba({ defaultTopic }: { defaultTopic?: Topic }) {
   const handlePost = async () => {
     const text = input.trim();
     if (!text) return;
+    setPostError(null);
     const res = await fetch('/api/posts', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ body: text, topic: postTopic }),
     });
-    if (!res.ok) return;
+    if (!res.ok) {
+      const json = await res.json().catch(() => ({}));
+      setPostError(json.error ?? '投稿に失敗しました。');
+      return;
+    }
     const newPost: Post = await res.json();
     newPost.liked = false;
     newPost.replies = [{ count: 0 }];
@@ -141,6 +147,11 @@ export default function Hiroba({ defaultTopic }: { defaultTopic?: Topic }) {
           rows={3}
           onKeyDown={(e) => { if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) handlePost(); }}
         />
+        {postError && (
+          <div className="mt-2 px-3 py-2 rounded-lg bg-red-50 border border-red-200 text-[12px] text-red-600">
+            {postError}
+          </div>
+        )}
         <div className="flex items-center justify-between mt-3 pt-3 border-t border-gray-100">
           <span className="text-[11px] text-gray-400">投稿名: にんげんさん（匿名）</span>
           <button

@@ -20,6 +20,7 @@ export default function ThreadClient({ postId, body }: ThreadClientProps) {
   const [replies, setReplies] = useState<Reply[]>([]);
   const [replyInput, setReplyInput] = useState("");
   const [loading, setLoading] = useState(true);
+  const [replyError, setReplyError] = useState<string | null>(null);
 
   useEffect(() => {
     fetch(`/api/posts/${postId}/replies`)
@@ -31,12 +32,17 @@ export default function ThreadClient({ postId, body }: ThreadClientProps) {
   const handleReply = async () => {
     const text = replyInput.trim();
     if (!text) return;
+    setReplyError(null);
     const res = await fetch(`/api/posts/${postId}/replies`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ body: text }),
     });
-    if (!res.ok) return;
+    if (!res.ok) {
+      const json = await res.json().catch(() => ({}));
+      setReplyError(json.error ?? '返信に失敗しました。');
+      return;
+    }
     const newReply: Reply = await res.json();
     setReplies((prev) => [...prev, newReply]);
     setReplyInput("");
@@ -85,6 +91,11 @@ export default function ThreadClient({ postId, body }: ThreadClientProps) {
           rows={3}
           onKeyDown={(e) => { if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) handleReply(); }}
         />
+        {replyError && (
+          <div className="mt-2 px-3 py-2 rounded-lg bg-red-50 border border-red-200 text-[12px] text-red-600">
+            {replyError}
+          </div>
+        )}
         <div className="flex items-center justify-between mt-3 pt-3 border-t border-gray-100">
           <span className="text-[11px] text-gray-400">投稿名: にんげんさん</span>
           <button
