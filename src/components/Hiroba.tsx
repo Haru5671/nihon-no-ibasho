@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import Link from "next/link";
 import { initialPosts, TOPICS, type Post, type Topic } from "@/data/posts";
 import ShareButtons from "@/components/ShareButtons";
+import AdSenseUnit from "@/components/AdSenseUnit";
 
 export default function Hiroba({ defaultTopic }: { defaultTopic?: Topic }) {
   const [posts, setPosts] = useState<Post[]>(initialPosts);
@@ -129,11 +130,15 @@ export default function Hiroba({ defaultTopic }: { defaultTopic?: Topic }) {
             まだ投稿がありません。最初に話してみませんか？
           </div>
         )}
-        {filtered.map((post) => {
+        {filtered.map((post, index) => {
           const m = getTopicMeta(post.topic);
           return (
+            <div key={post.id}>
+            {index > 0 && index % 5 === 0 && (
+              <AdSenseUnit slot="feed-inline" className="mb-3 rounded-xl overflow-hidden" />
+            )}
             <div
-              key={post.id}
+              key={`card-${post.id}`}
               className={`bg-white rounded-2xl border shadow-sm transition-all duration-200 ${
                 newPostIds.has(post.id) ? "border-teal-300 shadow-teal-100" : "border-gray-200 hover:border-gray-300 hover:shadow-md"
               }`}
@@ -186,6 +191,7 @@ export default function Hiroba({ defaultTopic }: { defaultTopic?: Topic }) {
                   <ShareButtons postId={post.id} body={post.body} />
                 </div>
               </div>
+            </div>
             </div>
           );
         })}

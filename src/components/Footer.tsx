@@ -1,3 +1,5 @@
+import Link from "next/link";
+
 export default function Footer() {
   return (
     <footer className="bg-white border-t border-gray-200 py-10 px-4">
@@ -8,9 +10,9 @@ export default function Footer() {
             <p className="text-gray-400 text-[12px]">AI時代に、人間が人間の存在意味を支え合う場所</p>
           </div>
           <div className="flex gap-5 text-[12px] text-gray-400">
-            <a href="#" className="hover:text-gray-700 transition-colors">利用規約</a>
-            <a href="#" className="hover:text-gray-700 transition-colors">プライバシーポリシー</a>
-            <a href="#" className="hover:text-gray-700 transition-colors">お問い合わせ</a>
+            <Link href="/terms" className="hover:text-gray-700 transition-colors">利用規約</Link>
+            <Link href="/privacy" className="hover:text-gray-700 transition-colors">プライバシーポリシー</Link>
+            <a href="mailto:hello@ibasho.co.jp" className="hover:text-gray-700 transition-colors">お問い合わせ</a>
           </div>
         </div>
         <div className="border-t border-gray-100 pt-5 text-center">
