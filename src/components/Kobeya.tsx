@@ -4,14 +4,14 @@ import { TOPICS, type Topic } from "@/data/posts";
 import type { Room } from "@/components/KobeyaRoom";
 
 export const rooms: Room[] = [
-  { id: 1, topic: "眠れない・不安", name: "夜更かしの会",       desc: "眠れない夜に、ゆるくつながる部屋。",         members: 128 },
-  { id: 2, topic: "体・こころ",     name: "HSPのひといき",      desc: "繊細さを持つ人同士で、安心して話せる場。",   members: 95  },
-  { id: 3, topic: "孤独・さみしさ", name: "在宅ワーカーの雑談", desc: "リモートワークの孤独を分かち合う。",         members: 74  },
-  { id: 4, topic: "なんでも",       name: "読書と内省",         desc: "本を通じて自分を見つめ直す部屋。",           members: 56  },
-  { id: 5, topic: "なんでも",       name: "散歩部",             desc: "今日歩いた道、見つけた景色をシェア。",       members: 112 },
-  { id: 6, topic: "なんでも",       name: "なんとなく話したい", desc: "テーマなし。ただ誰かと話したいときに。",     members: 203 },
-  { id: 7, topic: "仕事・AI",       name: "AIと仕事を語る",     desc: "AIへの不安や変化を、ここで吐き出してみて。", members: 167 },
-  { id: 8, topic: "家族・人間関係", name: "家族のこと",         desc: "家族には言えない家族の話をする場所。",       members: 89  },
+  { id: 1, topic: "眠れない・不安", name: "夜更かしの会",       desc: "眠れない夜に、ゆるくつながる部屋。",         members: 7  },
+  { id: 2, topic: "体・こころ",     name: "HSPのひといき",      desc: "繊細さを持つ人同士で、安心して話せる場。",   members: 4  },
+  { id: 3, topic: "孤独・さみしさ", name: "在宅ワーカーの雑談", desc: "リモートワークの孤独を分かち合う。",         members: 3  },
+  { id: 4, topic: "なんでも",       name: "読書と内省",         desc: "本を通じて自分を見つめ直す部屋。",           members: 2  },
+  { id: 5, topic: "なんでも",       name: "散歩部",             desc: "今日歩いた道、見つけた景色をシェア。",       members: 5  },
+  { id: 6, topic: "なんでも",       name: "なんとなく話したい", desc: "テーマなし。ただ誰かと話したいときに。",     members: 9  },
+  { id: 7, topic: "仕事・AI",       name: "AIと仕事を語る",     desc: "AIへの不安や変化を、ここで吐き出してみて。", members: 6  },
+  { id: 8, topic: "家族・人間関係", name: "家族のこと",         desc: "家族には言えない家族の話をする場所。",       members: 3  },
 ];
 
 interface KobeyaProps {

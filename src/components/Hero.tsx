@@ -16,7 +16,8 @@ export default function Hero({ onTopicSelect }: HeroProps) {
         </span>
 
         <h1 className="text-2xl md:text-3xl font-black text-gray-900 leading-snug mb-4">
-          AI時代に、<span className="text-teal-600">人間が人間の存在意味</span>を支え合う場所。
+          AI時代に、<span className="text-teal-600">人間が人間の存在意味</span>を<br />
+          支え合う、いばしょ。
         </h1>
 
         <p className="text-gray-500 text-sm leading-relaxed mb-8 max-w-md mx-auto">
