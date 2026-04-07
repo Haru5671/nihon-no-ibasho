@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import Script from "next/script";
+import PageTracker from "@/components/PageTracker";
 import "./globals.css";
 
 export const metadata: Metadata = {
@@ -22,6 +23,7 @@ export default function RootLayout({
         />
       </head>
       <body className="font-sans antialiased pt-[57px]">
+        <PageTracker />
         {children}
         {process.env.NEXT_PUBLIC_ADSENSE_PUB_ID && (
           <Script
