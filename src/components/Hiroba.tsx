@@ -5,6 +5,7 @@ import Link from "next/link";
 import { TOPICS, type Topic } from "@/data/posts";
 import ShareButtons from "@/components/ShareButtons";
 import AdSenseUnit from "@/components/AdSenseUnit";
+import TopicIcon from "@/components/TopicIcon";
 import { timeAgo } from "@/lib/utils";
 
 interface Post {
@@ -107,13 +108,14 @@ export default function Hiroba({ defaultTopic }: { defaultTopic?: Topic }) {
               <button
                 key={t.id}
                 onClick={() => setPostTopic(t.id)}
-                className={`px-2 py-0.5 rounded text-[11px] font-semibold border transition-colors ${
+                className={`px-2 py-0.5 rounded text-[11px] font-semibold border transition-colors flex items-center gap-1 ${
                   postTopic === t.id
                     ? `${t.color} font-bold`
                     : "bg-white text-gray-400 border-gray-200 hover:border-gray-300"
                 }`}
               >
-                {t.emoji} {t.id}
+                <TopicIcon topic={t.id} size={11} />
+                {t.id}
               </button>
             ))}
           </div>
@@ -163,7 +165,8 @@ export default function Hiroba({ defaultTopic }: { defaultTopic?: Topic }) {
               selectedTopic === t.id ? "bg-teal-600 text-white" : "text-gray-500 hover:bg-gray-50"
             }`}
           >
-            {t.emoji} {t.id}
+            <TopicIcon topic={t.id} size={12} className="shrink-0" />
+            {t.id}
           </button>
         ))}
       </div>
@@ -190,8 +193,9 @@ export default function Hiroba({ defaultTopic }: { defaultTopic?: Topic }) {
                 <Link href={`/posts/${post.id}`} className="block px-4 py-3">
                   {/* Meta row */}
                   <div className="flex items-center gap-2 mb-1.5">
-                    <span className={`text-[10px] px-1.5 py-0.5 rounded font-semibold border ${m.color}`}>
-                      {m.emoji} {post.topic}
+                    <span className={`text-[10px] px-1.5 py-0.5 rounded font-semibold border flex items-center gap-1 ${m.color}`}>
+                      <TopicIcon topic={post.topic} size={10} />
+                      {post.topic}
                     </span>
                     {newPostIds.has(post.id) && (
                       <span className="text-[10px] px-1.5 py-0.5 rounded bg-teal-100 text-teal-700 font-bold">NEW</span>

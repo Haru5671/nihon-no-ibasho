@@ -3,6 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { TOPICS } from "@/data/posts";
+import TopicIcon from "@/components/TopicIcon";
 
 export default function Header() {
   const [open, setOpen] = useState(false);
@@ -55,9 +56,10 @@ export default function Header() {
             <a
               key={t.id}
               href="#hiroba"
-              className="shrink-0 text-[12px] text-gray-600 hover:text-teal-600 px-3 h-full flex items-center border-r border-gray-100 hover:bg-gray-50 transition-colors whitespace-nowrap"
+              className="shrink-0 text-[12px] text-gray-600 hover:text-teal-600 px-3 h-full flex items-center gap-1 border-r border-gray-100 hover:bg-gray-50 transition-colors whitespace-nowrap"
             >
-              {t.emoji} {t.id}
+              <TopicIcon topic={t.id} size={12} />
+              {t.id}
             </a>
           ))}
         </div>
