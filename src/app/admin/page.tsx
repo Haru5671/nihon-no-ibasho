@@ -5,6 +5,7 @@ import AdminLogout from './AdminLogout';
 export const dynamic = 'force-dynamic';
 
 const TOPICS = ['なんでも', '仕事・AI', '孤独・さみしさ', '眠れない・不安', '家族・人間関係', '恋愛・パートナー', '体・こころ'];
+const AI_NAME = 'にんげんさん';
 
 function adminDb() {
   return createClient(
@@ -26,10 +27,17 @@ async function getStats() {
   const replies = repliesResult.data ?? [];
   const pvRows = pvResult.data ?? [];
 
+  const humanPosts = posts.filter((p) => p.name !== AI_NAME);
+  const aiPosts = posts.filter((p) => p.name === AI_NAME);
+  const aiPostIds = new Set(aiPosts.map((p) => p.id));
+
   const now = new Date();
   const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
   const postsToday = posts.filter((p) => new Date(p.created_at) >= today).length;
-  const totalLikes = posts.reduce((sum: number, p) => sum + (p.likes ?? 0), 0);
+
+  // Human-only likes/replies
+  const humanLikes = humanPosts.reduce((sum: number, p) => sum + (p.likes ?? 0), 0);
+  const humanReplies = replies.filter((r) => !aiPostIds.has(r.post_id)).length;
 
   // PV stats
   const totalPV = pvRows.length;
@@ -85,16 +93,19 @@ async function getStats() {
   const recentPosts = posts
     .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
     .slice(0, 50)
-    .map((p) => ({ ...p, replyCount: repliesPerPost[p.id] ?? 0 }));
+    .map((p) => ({ ...p, replyCount: repliesPerPost[p.id] ?? 0, isAI: p.name === AI_NAME }));
 
   const maxPV = Math.max(...dailyStats.map((d) => d.pv), 1);
   const maxPosts = Math.max(...dailyStats.map((d) => d.posts), 1);
 
   return {
     totalPosts: posts.length,
+    humanPostCount: humanPosts.length,
+    aiPostCount: aiPosts.length,
     totalReplies: replies.length,
+    humanReplies,
     postsToday,
-    totalLikes,
+    humanLikes,
     totalPV,
     uniqueUsers,
     pvToday,
@@ -115,9 +126,9 @@ export default async function AdminPage() {
   const summaryCards = [
     { label: 'TOTAL PV', value: s.totalPV.toLocaleString(), sub: `今日 ${s.pvToday}`, color: '#00d4ff' },
     { label: 'UNIQUE USERS', value: s.uniqueUsers.toLocaleString(), sub: `今日 ${s.uvToday}`, color: '#39d353' },
-    { label: 'TOTAL POSTS', value: s.totalPosts.toLocaleString(), sub: `今日 ${s.postsToday}`, color: '#a78bfa' },
-    { label: 'TOTAL REPLIES', value: s.totalReplies.toLocaleString(), sub: '', color: '#fb923c' },
-    { label: 'TOTAL LIKES', value: s.totalLikes.toLocaleString(), sub: '', color: '#f472b6' },
+    { label: 'POSTS (human)', value: s.humanPostCount.toLocaleString(), sub: `AI: ${s.aiPostCount} / 今日: ${s.postsToday}`, color: '#a78bfa' },
+    { label: 'REPLIES (human)', value: s.humanReplies.toLocaleString(), sub: `全体: ${s.totalReplies}`, color: '#fb923c' },
+    { label: 'LIKES (human)', value: s.humanLikes.toLocaleString(), sub: 'AI投稿除く', color: '#f472b6' },
   ];
 
   return (
@@ -143,36 +154,50 @@ export default async function AdminPage() {
           {summaryCards.map((c) => (
             <div key={c.label} style={{ background: '#161b22', border: '1px solid #21262d', borderRadius: '6px', padding: '16px 20px' }}>
               <div style={{ fontSize: '10px', color: '#484f58', letterSpacing: '0.12em', marginBottom: '6px' }}>{c.label}</div>
-              <div style={{ fontSize: '28px', fontWeight: 700, color: c.color, lineHeight: 1, marginBottom: '4px' }}>{c.value}</div>
-              {c.sub && <div style={{ fontSize: '11px', color: '#6e7681' }}>{c.sub}</div>}
+              <div style={{ fontSize: '26px', fontWeight: 700, color: c.color, lineHeight: 1, marginBottom: '4px' }}>{c.value}</div>
+              {c.sub && <div style={{ fontSize: '10px', color: '#6e7681' }}>{c.sub}</div>}
             </div>
           ))}
         </div>
 
-        {/* PV / Posts chart (14 days) */}
-        <div style={{ background: '#161b22', border: '1px solid #21262d', borderRadius: '6px', padding: '20px', marginBottom: '20px' }}>
-          <div style={{ fontSize: '11px', color: '#484f58', letterSpacing: '0.1em', marginBottom: '16px' }}>
-            PV / POSTS — LAST 14 DAYS
-          </div>
-          <div style={{ display: 'flex', alignItems: 'flex-end', gap: '6px', height: '80px' }}>
-            {s.dailyStats.map((d) => (
-              <div key={d.label} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '2px', height: '100%', justifyContent: 'flex-end' }}>
-                <div style={{ width: '100%', position: 'relative', display: 'flex', flexDirection: 'column', gap: '1px', justifyContent: 'flex-end', height: '64px' }}>
-                  <div style={{ width: '100%', background: '#00d4ff33', borderRadius: '2px 2px 0 0', height: `${Math.max((d.pv / s.maxPV) * 60, d.pv > 0 ? 3 : 0)}px`, position: 'relative' }}>
-                    <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, background: '#a78bfa', borderRadius: '2px 2px 0 0', height: `${Math.max((d.posts / s.maxPV) * 60, d.posts > 0 ? 3 : 0)}px` }} />
+        {/* PV chart + Posts chart (separate, side by side) */}
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', marginBottom: '20px' }}>
+
+          {/* PV chart */}
+          <div style={{ background: '#161b22', border: '1px solid #21262d', borderRadius: '6px', padding: '20px' }}>
+            <div style={{ fontSize: '11px', color: '#484f58', letterSpacing: '0.1em', marginBottom: '4px' }}>PAGE VIEWS — LAST 14 DAYS</div>
+            <div style={{ fontSize: '10px', color: '#6e7681', marginBottom: '16px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <span style={{ display: 'inline-block', width: '8px', height: '8px', background: '#00d4ff', borderRadius: '2px' }} />PV
+              <span style={{ display: 'inline-block', width: '8px', height: '8px', background: '#39d353', borderRadius: '2px', marginLeft: '4px' }} />UV
+            </div>
+            <div style={{ display: 'flex', alignItems: 'flex-end', gap: '4px', height: '80px' }}>
+              {s.dailyStats.map((d) => (
+                <div key={d.label} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '2px' }}>
+                  <div style={{ width: '100%', display: 'flex', alignItems: 'flex-end', gap: '1px', height: '64px' }}>
+                    <div style={{ flex: 1, background: '#00d4ff66', borderRadius: '2px 2px 0 0', height: `${Math.max((d.pv / s.maxPV) * 64, d.pv > 0 ? 2 : 0)}px` }} />
+                    <div style={{ flex: 1, background: '#39d353', borderRadius: '2px 2px 0 0', height: `${Math.max((d.uv / s.maxPV) * 64, d.uv > 0 ? 2 : 0)}px` }} />
                   </div>
+                  <span style={{ fontSize: '8px', color: '#484f58', whiteSpace: 'nowrap' }}>{d.label}</span>
                 </div>
-                <span style={{ fontSize: '9px', color: '#484f58', whiteSpace: 'nowrap' }}>{d.label}</span>
-              </div>
-            ))}
+              ))}
+            </div>
           </div>
-          <div style={{ display: 'flex', gap: '16px', marginTop: '10px' }}>
-            <span style={{ fontSize: '10px', color: '#6e7681', display: 'flex', alignItems: 'center', gap: '4px' }}>
-              <span style={{ display: 'inline-block', width: '10px', height: '10px', background: '#00d4ff33', borderRadius: '2px' }} />PV
-            </span>
-            <span style={{ fontSize: '10px', color: '#6e7681', display: 'flex', alignItems: 'center', gap: '4px' }}>
-              <span style={{ display: 'inline-block', width: '10px', height: '10px', background: '#a78bfa', borderRadius: '2px' }} />投稿
-            </span>
+
+          {/* Posts chart */}
+          <div style={{ background: '#161b22', border: '1px solid #21262d', borderRadius: '6px', padding: '20px' }}>
+            <div style={{ fontSize: '11px', color: '#484f58', letterSpacing: '0.1em', marginBottom: '4px' }}>POSTS — LAST 14 DAYS</div>
+            <div style={{ fontSize: '10px', color: '#6e7681', marginBottom: '16px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <span style={{ display: 'inline-block', width: '8px', height: '8px', background: '#a78bfa', borderRadius: '2px' }} />投稿数
+            </div>
+            <div style={{ display: 'flex', alignItems: 'flex-end', gap: '4px', height: '80px' }}>
+              {s.dailyStats.map((d) => (
+                <div key={d.label} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '2px' }}>
+                  <span style={{ fontSize: '8px', color: '#6e7681' }}>{d.posts > 0 ? d.posts : ''}</span>
+                  <div style={{ width: '100%', background: '#a78bfa', borderRadius: '2px 2px 0 0', height: `${Math.max((d.posts / s.maxPosts) * 56, d.posts > 0 ? 2 : 0)}px` }} />
+                  <span style={{ fontSize: '8px', color: '#484f58', whiteSpace: 'nowrap' }}>{d.label}</span>
+                </div>
+              ))}
+            </div>
           </div>
         </div>
 
@@ -192,11 +217,11 @@ export default async function AdminPage() {
               <tbody>
                 {s.topPages.map(([path, count], i) => (
                   <tr key={path}>
-                    <td style={{ padding: '7px 0', color: '#e6edf3', borderBottom: '1px solid #161b22', fontFamily: 'monospace' }}>
+                    <td style={{ padding: '7px 0', color: '#e6edf3', borderBottom: '1px solid #21262d', fontFamily: 'monospace' }}>
                       <span style={{ color: '#484f58', marginRight: '8px' }}>{String(i + 1).padStart(2, '0')}</span>
                       {path.length > 28 ? path.slice(0, 28) + '…' : path}
                     </td>
-                    <td style={{ padding: '7px 0', textAlign: 'right', color: '#00d4ff', borderBottom: '1px solid #161b22' }}>{count}</td>
+                    <td style={{ padding: '7px 0', textAlign: 'right', color: '#00d4ff', borderBottom: '1px solid #21262d' }}>{count}</td>
                   </tr>
                 ))}
                 {s.topPages.length === 0 && (
@@ -234,12 +259,16 @@ export default async function AdminPage() {
         <div style={{ background: '#161b22', border: '1px solid #21262d', borderRadius: '6px', overflow: 'hidden' }}>
           <div style={{ padding: '14px 20px', borderBottom: '1px solid #21262d', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
             <span style={{ fontSize: '11px', color: '#484f58', letterSpacing: '0.1em' }}>RECENT POSTS — TOP 50</span>
-            <span style={{ fontSize: '11px', color: '#6e7681' }}>{s.recentPosts.length} rows</span>
+            <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
+              <span style={{ fontSize: '10px', color: '#39d353' }}>人間 {s.humanPostCount}</span>
+              <span style={{ fontSize: '10px', color: '#f59e0b' }}>AI {s.aiPostCount}</span>
+              <span style={{ fontSize: '11px', color: '#6e7681' }}>{s.recentPosts.length} rows</span>
+            </div>
           </div>
           <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '12px' }}>
             <thead>
               <tr style={{ background: '#0d1117' }}>
-                {['CREATED_AT', 'TOPIC', 'BODY', 'LIKES', 'REPLIES', ''].map((h) => (
+                {['CREATED_AT', 'TYPE', 'TOPIC', 'BODY', 'LIKES', 'REPLIES', ''].map((h) => (
                   <th key={h} style={{ padding: '8px 16px', textAlign: h === 'LIKES' || h === 'REPLIES' ? 'center' : 'left', color: '#6e7681', fontWeight: 400, fontSize: '10px', letterSpacing: '0.08em', borderBottom: '1px solid #21262d' }}>{h}</th>
                 ))}
               </tr>
@@ -251,9 +280,15 @@ export default async function AdminPage() {
                     {new Date(post.created_at).toLocaleString('ja-JP', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
                   </td>
                   <td style={{ padding: '9px 16px', whiteSpace: 'nowrap' }}>
+                    {post.isAI
+                      ? <span style={{ fontSize: '10px', padding: '2px 8px', borderRadius: '99px', background: '#451a0320', color: '#f59e0b', border: '1px solid #92400e' }}>AI</span>
+                      : <span style={{ fontSize: '10px', padding: '2px 8px', borderRadius: '99px', background: '#05200a20', color: '#39d353', border: '1px solid #166534' }}>人間</span>
+                    }
+                  </td>
+                  <td style={{ padding: '9px 16px', whiteSpace: 'nowrap' }}>
                     <span style={{ fontSize: '10px', padding: '2px 8px', borderRadius: '99px', background: '#21262d', color: '#8b949e' }}>{post.topic}</span>
                   </td>
-                  <td style={{ padding: '9px 16px', color: '#c9d1d9', maxWidth: '400px' }}>
+                  <td style={{ padding: '9px 16px', color: '#c9d1d9', maxWidth: '360px' }}>
                     <span style={{ display: '-webkit-box', WebkitLineClamp: 1, WebkitBoxOrient: 'vertical', overflow: 'hidden' } as React.CSSProperties}>
                       {post.body}
                     </span>
@@ -266,7 +301,7 @@ export default async function AdminPage() {
                 </tr>
               ))}
               {s.recentPosts.length === 0 && (
-                <tr><td colSpan={6} style={{ padding: '32px', textAlign: 'center', color: '#484f58' }}>no data</td></tr>
+                <tr><td colSpan={7} style={{ padding: '32px', textAlign: 'center', color: '#484f58' }}>no data</td></tr>
               )}
             </tbody>
           </table>
