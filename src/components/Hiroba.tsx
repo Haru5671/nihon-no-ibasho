@@ -27,7 +27,7 @@ export default function Hiroba({ defaultTopic }: { defaultTopic?: Topic }) {
   const [newPostIds, setNewPostIds] = useState<Set<string>>(new Set());
   const [loading, setLoading] = useState(true);
   const [postError, setPostError] = useState<string | null>(null);
-  const [formOpen, setFormOpen] = useState(false);
+  const [focused, setFocused] = useState(false);
 
   useEffect(() => {
     if (defaultTopic) setSelectedTopic(defaultTopic);
@@ -62,7 +62,7 @@ export default function Hiroba({ defaultTopic }: { defaultTopic?: Topic }) {
     setPosts((prev) => [newPost, ...prev]);
     setNewPostIds((prev) => new Set(prev).add(newPost.id));
     setInput("");
-    setFormOpen(false);
+    setFocused(false);
   };
 
   useEffect(() => {
@@ -90,62 +90,57 @@ export default function Hiroba({ defaultTopic }: { defaultTopic?: Topic }) {
   return (
     <div>
 
-      {/* Post trigger button */}
-      {!formOpen && (
-        <button
-          onClick={() => setFormOpen(true)}
-          className="w-full text-left bg-white border border-gray-200 rounded px-3 py-2.5 mb-3 text-[13px] text-gray-400 hover:border-teal-400 transition-colors"
-        >
-          💬 いま感じていることを書いてみる...
-        </button>
-      )}
-
-      {/* Post form */}
-      {formOpen && (
-        <div className="bg-white border border-teal-300 rounded mb-3 p-3 shadow-sm">
-          <div className="flex gap-1.5 flex-wrap mb-2">
-            {TOPICS.map((t) => (
-              <button
-                key={t.id}
-                onClick={() => setPostTopic(t.id)}
-                className={`px-2 py-0.5 rounded text-[11px] font-semibold border transition-colors flex items-center gap-1 ${
-                  postTopic === t.id
-                    ? `${t.color} font-bold`
-                    : "bg-white text-gray-400 border-gray-200 hover:border-gray-300"
-                }`}
-              >
-                <TopicIcon topic={t.id} size={11} />
-                {t.id}
-              </button>
-            ))}
-          </div>
-          <textarea
-            value={input}
-            onChange={(e) => setInput(e.target.value)}
-            placeholder="いま感じていることを書いてみる..."
-            className="w-full bg-transparent text-gray-700 placeholder-gray-300 resize-none outline-none text-[13px] leading-relaxed"
-            rows={3}
-            autoFocus
-            onKeyDown={(e) => { if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) handlePost(); }}
-          />
-          {postError && (
-            <div className="mt-1 px-2 py-1.5 rounded bg-red-50 border border-red-200 text-[11px] text-red-600">{postError}</div>
-          )}
-          <div className="flex items-center justify-between mt-2 pt-2 border-t border-gray-100">
-            <span className="text-[11px] text-gray-400">匿名投稿</span>
-            <div className="flex gap-2">
-              <button onClick={() => setFormOpen(false)} className="px-3 py-1 text-[12px] text-gray-500 hover:text-gray-700 transition-colors">キャンセル</button>
-              <button
-                onClick={handlePost}
-                disabled={!input.trim()}
-                className="px-3 py-1 text-[12px] font-semibold rounded bg-teal-600 hover:bg-teal-700 text-white transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
-              >
-                投稿する
-              </button>
-            </div>
-          </div>
+      {/* Post form — always visible hero */}
+      <div className={`bg-white border-2 rounded-lg mb-4 p-4 shadow-sm transition-all ${focused || focused ? 'border-teal-400 shadow-md' : 'border-gray-200 hover:border-teal-300'}`}>
+        <div className="flex items-center gap-2 mb-3">
+          <svg className="w-4 h-4 text-teal-500 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+          </svg>
+          <span className="text-[13px] font-bold text-gray-700">いま感じていることを話してみる</span>
+          <span className="text-[11px] text-gray-400 ml-auto">匿名・登録不要</span>
         </div>
-      )}
+
+        {/* Topic selector */}
+        <div className="flex gap-1.5 flex-wrap mb-3">
+          {TOPICS.map((t) => (
+            <button
+              key={t.id}
+              onClick={() => { setPostTopic(t.id); setFocused(true); }}
+              className={`px-2 py-0.5 rounded text-[11px] font-semibold border transition-colors flex items-center gap-1 ${
+                postTopic === t.id
+                  ? `${t.color} font-bold`
+                  : "bg-white text-gray-400 border-gray-200 hover:border-gray-300"
+              }`}
+            >
+              <TopicIcon topic={t.id} size={11} />
+              {t.id}
+            </button>
+          ))}
+        </div>
+
+        <textarea
+          value={input}
+          onChange={(e) => setInput(e.target.value)}
+          onFocus={() => setFocused(true)}
+          placeholder="AIに仕事を奪われた、失業手当がわからない、クビになった、誰にも話せない気持ち…なんでも書いてみてください。"
+          className="w-full bg-gray-50 text-gray-700 placeholder-gray-400 resize-none outline-none text-[13px] leading-relaxed rounded p-2.5 border border-gray-200 focus:border-teal-300 focus:bg-white transition-colors"
+          rows={focused || focused ? 4 : 2}
+          onKeyDown={(e) => { if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) handlePost(); }}
+        />
+        {postError && (
+          <div className="mt-2 px-2 py-1.5 rounded bg-red-50 border border-red-200 text-[11px] text-red-600">{postError}</div>
+        )}
+        <div className="flex items-center justify-between mt-3">
+          <span className="text-[11px] text-gray-400">Cmd+Enter で投稿</span>
+          <button
+            onClick={handlePost}
+            disabled={!input.trim()}
+            className="px-5 py-2 text-[13px] font-bold rounded-full bg-teal-600 hover:bg-teal-700 text-white transition-colors disabled:opacity-30 disabled:cursor-not-allowed shadow-sm"
+          >
+            投稿する
+          </button>
+        </div>
+      </div>
 
       {/* Topic filter tabs */}
       <div className="flex gap-0 overflow-x-auto mb-2 bg-white border border-gray-200 rounded" style={{ scrollbarWidth: 'none' }}>

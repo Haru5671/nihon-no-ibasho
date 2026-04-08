@@ -17,15 +17,18 @@ export default function Header() {
             <span className="text-teal-600">に</span>ほんのいばしょ
           </Link>
 
-          <div className="hidden md:flex items-center gap-3 flex-1 max-w-xs">
-            <div className="flex-1 flex items-center border border-gray-300 rounded bg-white overflow-hidden h-7">
+          <div className="hidden md:flex items-center gap-3 flex-1 max-w-sm">
+            <div className="flex-1 flex items-center border-2 border-teal-500 rounded-full bg-white overflow-hidden h-9 shadow-sm">
+              <svg className="w-4 h-4 text-gray-400 ml-3 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+              </svg>
               <input
                 type="text"
-                placeholder="トピックで探す"
+                placeholder="AI失業・失業手当・再就職..."
                 readOnly
-                className="flex-1 text-[12px] px-2 outline-none text-gray-500 bg-white"
+                className="flex-1 text-[13px] px-2.5 outline-none text-gray-600 bg-white placeholder-gray-400"
               />
-              <button className="bg-teal-600 text-white text-[11px] px-2.5 h-full font-semibold">検索</button>
+              <button className="bg-teal-600 hover:bg-teal-700 text-white text-[12px] px-4 h-full font-bold transition-colors shrink-0">検索</button>
             </div>
           </div>
 

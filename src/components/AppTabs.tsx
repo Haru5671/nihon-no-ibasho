@@ -9,6 +9,8 @@ import { TOPICS } from "@/data/posts";
 import TopicIcon from "./TopicIcon";
 import WeatherWidget from "./WeatherWidget";
 import NewsWidget from "./NewsWidget";
+import BaseballWidget from "./BaseballWidget";
+import TrendingWidget from "./TrendingWidget";
 import AdSenseUnit from "./AdSenseUnit";
 
 const tabs = [
@@ -73,6 +75,12 @@ export default function AppTabs({ initialTopic, onTopicSelect }: AppTabsProps) {
 
         {/* Main content */}
         <div className="flex-1 min-w-0">
+          {/* Mobile widget bar */}
+          <div className="lg:hidden mb-3 flex gap-2 overflow-x-auto pb-1" style={{ scrollbarWidth: 'none' }}>
+            <div className="shrink-0 w-[260px]"><TrendingWidget /></div>
+            <div className="shrink-0 w-[200px]"><WeatherWidget /></div>
+            <div className="shrink-0 w-[220px]"><BaseballWidget /></div>
+          </div>
           {active === "hiroba" && <Hiroba defaultTopic={hirohaTopic} />}
           {active === "kobeya" && !activeRoom && <Kobeya onEnterRoom={handleEnterRoom} />}
           {active === "kobeya" && activeRoom && (
@@ -83,8 +91,14 @@ export default function AppTabs({ initialTopic, onTopicSelect }: AppTabsProps) {
         {/* Right sidebar */}
         <aside className="hidden lg:block w-[240px] shrink-0 space-y-3">
 
+          {/* Trending keywords */}
+          <TrendingWidget />
+
           {/* Weather */}
           <WeatherWidget />
+
+          {/* Baseball */}
+          <BaseballWidget />
 
           {/* Ad unit */}
           <AdSenseUnit className="overflow-hidden rounded border border-gray-200" />
