@@ -110,7 +110,7 @@ export default function RootLayout({
           dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
         />
       </head>
-      <body className="font-sans antialiased pt-[57px]">
+      <body className="font-sans antialiased pt-[76px]">
         <PageTracker />
         {children}
         {process.env.NEXT_PUBLIC_ADSENSE_PUB_ID && (

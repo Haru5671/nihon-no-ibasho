@@ -8,43 +8,32 @@ interface HeroProps {
 
 export default function Hero({ onTopicSelect }: HeroProps) {
   return (
-    <section className="bg-white border-b border-gray-100 px-4 py-12">
-      <div className="max-w-2xl mx-auto text-center">
+    <section className="bg-white border-b border-gray-200 px-4 py-4">
+      <div className="max-w-5xl mx-auto">
+        <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3">
+          {/* Description */}
+          <div className="flex-1 min-w-0">
+            <p className="text-[13px] text-gray-700 font-semibold mb-0.5">
+              AIのせいで仕事を失った・失業手当がわからない・誰にも相談できない——
+            </p>
+            <p className="text-[11px] text-gray-400 leading-relaxed">
+              AI失業・再就職・クビ・有休消化・失業どうすれば。匿名・登録不要で話せるコミュニティです。
+            </p>
+          </div>
 
-        <span className="text-[10px] font-semibold tracking-[0.2em] text-gray-400 uppercase mb-5 block">
-          NIHON NO IBASHO
-        </span>
-
-        <h1 className="text-2xl md:text-3xl font-black text-gray-900 leading-snug mb-4">
-          AI時代に、<span className="text-teal-600">人間が人間の存在意味</span>を<br />
-          支え合う、いばしょ。
-        </h1>
-
-        <p className="text-gray-500 text-sm leading-relaxed mb-3 max-w-md mx-auto">
-          家族や知人には話しづらいことを、匿名でオープンに話せる場所です。
-          登録不要・完全無料。
-        </p>
-
-        <p className="text-gray-400 text-[12px] leading-relaxed mb-8 max-w-lg mx-auto">
-          AIのせいで仕事を失った・クビになった・失業手当の申請がわからない・有休消化中で再就職が不安・誰にも相談できない——そんな気持ちを話せる場所です。
-        </p>
-
-        {/* Topic pills */}
-        <div className="flex flex-wrap gap-2 justify-center mb-6">
-          {TOPICS.map((t) => (
-            <button
-              key={t.id}
-              onClick={() => onTopicSelect?.(t.id)}
-              className="px-3.5 py-1.5 rounded-full text-[12px] font-medium border border-gray-200 bg-white text-gray-600 hover:border-teal-400 hover:text-teal-600 hover:bg-teal-50 transition-colors"
-            >
-              {t.emoji} {t.id}
-            </button>
-          ))}
+          {/* Topic quick select */}
+          <div className="flex flex-wrap gap-1.5 shrink-0">
+            {TOPICS.slice(0, 4).map((t) => (
+              <button
+                key={t.id}
+                onClick={() => onTopicSelect?.(t.id)}
+                className="px-2.5 py-1 rounded text-[11px] font-medium border border-gray-200 bg-gray-50 text-gray-600 hover:border-teal-400 hover:text-teal-600 hover:bg-teal-50 transition-colors"
+              >
+                {t.emoji} {t.id}
+              </button>
+            ))}
+          </div>
         </div>
-
-        <p className="text-[11px] text-gray-400">
-          唯一のルール：<span className="font-semibold text-gray-600">悪口禁止</span>
-        </p>
       </div>
     </section>
   );
