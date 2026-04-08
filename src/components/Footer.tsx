@@ -15,8 +15,11 @@ export default function Footer() {
             <a href="#" className="hover:text-gray-700 transition-colors">お問い合わせ</a>
           </div>
         </div>
-        <div className="border-t border-gray-100 pt-5 text-center">
-          <p className="text-gray-400 text-[11px]">
+        <div className="border-t border-gray-100 pt-5">
+          <p className="text-gray-300 text-[11px] leading-relaxed mb-3">
+            AI失業 / AIに仕事を奪われた / AIのせいで失業 / AI嫌い / 失業手当 / 再就職 / 有休消化 / クビ / 失業どうすれば / 相談できない——同じ気持ちの人が集まる匿名コミュニティ
+          </p>
+          <p className="text-gray-400 text-[11px] text-center">
             &copy; {new Date().getFullYear()} にほんのいばしょ. All rights reserved.
           </p>
         </div>

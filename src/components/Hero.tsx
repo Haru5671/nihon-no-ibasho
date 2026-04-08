@@ -20,9 +20,13 @@ export default function Hero({ onTopicSelect }: HeroProps) {
           支え合う、いばしょ。
         </h1>
 
-        <p className="text-gray-500 text-sm leading-relaxed mb-8 max-w-md mx-auto">
+        <p className="text-gray-500 text-sm leading-relaxed mb-3 max-w-md mx-auto">
           家族や知人には話しづらいことを、匿名でオープンに話せる場所です。
           登録不要・完全無料。
+        </p>
+
+        <p className="text-gray-400 text-[12px] leading-relaxed mb-8 max-w-lg mx-auto">
+          AIのせいで仕事を失った・クビになった・失業手当の申請がわからない・有休消化中で再就職が不安・誰にも相談できない——そんな気持ちを話せる場所です。
         </p>
 
         {/* Topic pills */}

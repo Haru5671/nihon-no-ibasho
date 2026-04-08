@@ -6,6 +6,24 @@ import ThreadClient from "./ThreadClient";
 
 export const dynamic = 'force-dynamic';
 
+export async function generateMetadata({ params }: { params: { postId: string } }) {
+  const post = await getPost(params.postId);
+  if (!post) return {};
+  const snippet = post.body.length > 60 ? post.body.slice(0, 60) + '…' : post.body;
+  return {
+    title: `${snippet} | にほんのいばしょ`,
+    description: `${post.body.slice(0, 120)} — AI失業・失業手当・再就職・クビなど誰にも相談できない悩みを匿名で話せるコミュニティ「にほんのいばしょ」`,
+    openGraph: {
+      title: snippet,
+      description: post.body.slice(0, 120),
+      url: `https://ibasho.co.jp/posts/${params.postId}`,
+      siteName: 'にほんのいばしょ',
+      locale: 'ja_JP',
+      type: 'article',
+    },
+  };
+}
+
 async function getPost(postId: string) {
   const baseUrl = process.env.NEXT_PUBLIC_APP_URL ?? 'https://ibasho.co.jp';
   const res = await fetch(`${baseUrl}/api/posts/${postId}`, { cache: 'no-store' });
