@@ -53,6 +53,8 @@ export default function KobeyaRoom({ room, onLeave }: KobeyaRoomProps) {
   const [loadingMsgs, setLoadingMsgs] = useState(true);
   const [activeUsers, setActiveUsers] = useState<PresenceUser[]>([]);
   const bottomRef = useRef<HTMLDivElement>(null);
+  const presenceChannelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
+  const chatChannelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
 
   // Current user
   const [currentUser, setCurrentUser] = useState<{ id: string; name: string } | null>(null);
@@ -93,52 +95,65 @@ export default function KobeyaRoom({ room, onLeave }: KobeyaRoomProps) {
       });
   }, [room.id]);
 
-  // Realtime messages
+  // Realtime chat via Broadcast (postgres_changes requires publication setup; broadcast works without it)
   useEffect(() => {
-    const channel = supabase
-      .channel(`room_messages:${room.id}`)
-      .on('postgres_changes', {
-        event: 'INSERT', schema: 'public', table: 'room_messages', filter: `room_id=eq.${room.id}`
-      }, (payload) => {
+    const ch = supabase.channel(`chat_broadcast_${room.id}`, {
+      config: { broadcast: { self: false } },
+    })
+      .on('broadcast', { event: 'new_message' }, ({ payload }) => {
         setMessages((prev) => {
-          if (prev.some((m) => m.id === (payload.new as Message).id)) return prev;
-          return [...prev, payload.new as Message];
+          if (prev.some((m) => m.id === payload.id)) return prev;
+          return [...prev, payload as Message];
         });
       })
       .subscribe();
-    return () => { supabase.removeChannel(channel); };
+    chatChannelRef.current = ch;
+    return () => {
+      supabase.removeChannel(ch);
+      chatChannelRef.current = null;
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [room.id]);
 
-  // Presence — active users
+  // Presence — subscribe once on room enter, update track when user loads
   useEffect(() => {
-    const displayName = currentUser?.name ?? 'にんげんさん';
-    const presenceChannel = supabase.channel(`presence_room_${room.id}`, {
+    const ch = supabase.channel(`presence_room_${room.id}`, {
       config: { presence: { key: myPresenceId.current } },
     });
+    presenceChannelRef.current = ch;
 
-    presenceChannel
-      .on('presence', { event: 'sync' }, () => {
-        const state = presenceChannel.presenceState<PresenceUser>();
-        const users: PresenceUser[] = [];
-        Object.values(state).forEach((entries) => {
-          entries.forEach((e) => users.push(e));
+    ch.on('presence', { event: 'sync' }, () => {
+      const state = ch.presenceState<PresenceUser>();
+      const users: PresenceUser[] = [];
+      Object.values(state).forEach((entries) => entries.forEach((e) => users.push(e)));
+      setActiveUsers(users);
+    })
+    .subscribe(async (status) => {
+      if (status === 'SUBSCRIBED') {
+        await ch.track({
+          userId: myPresenceId.current,
+          displayName: 'にんげんさん',
+          joinedAt: Date.now(),
         });
-        setActiveUsers(users);
-      })
-      .subscribe(async (status) => {
-        if (status === 'SUBSCRIBED') {
-          await presenceChannel.track({
-            userId: myPresenceId.current,
-            displayName,
-            joinedAt: Date.now(),
-          });
-        }
-      });
+      }
+    });
 
-    return () => { supabase.removeChannel(presenceChannel); };
+    return () => {
+      supabase.removeChannel(ch);
+      presenceChannelRef.current = null;
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [room.id, currentUser]);
+  }, [room.id]);
+
+  // Update presence display name once user info loads
+  useEffect(() => {
+    if (!currentUser || !presenceChannelRef.current) return;
+    presenceChannelRef.current.track({
+      userId: myPresenceId.current,
+      displayName: currentUser.name,
+      joinedAt: Date.now(),
+    });
+  }, [currentUser]);
 
   // Auto scroll
   useEffect(() => {
@@ -148,9 +163,19 @@ export default function KobeyaRoom({ room, onLeave }: KobeyaRoomProps) {
   const handlePost = async () => {
     const text = input.trim();
     if (!text) return;
-    setInput("");
+    setInput('');
     const name = currentUser?.name ?? 'にんげんさん';
-    await supabase.from('room_messages').insert({ room_id: room.id, body: text, name });
+
+    // Optimistic update so sender sees message immediately
+    const tempId = -Date.now();
+    const optimistic: Message = { id: tempId, room_id: room.id, body: text, name, created_at: new Date().toISOString() };
+    setMessages((prev) => [...prev, optimistic]);
+
+    const { data } = await supabase.from('room_messages').insert({ room_id: room.id, body: text, name }).select().single();
+    if (data) {
+      setMessages((prev) => prev.map((m) => m.id === tempId ? (data as Message) : m));
+      chatChannelRef.current?.send({ type: 'broadcast', event: 'new_message', payload: data });
+    }
   };
 
   // ---- Voice Chat (WebRTC) ----
@@ -159,6 +184,9 @@ export default function KobeyaRoom({ room, onLeave }: KobeyaRoomProps) {
       iceServers: [
         { urls: 'stun:stun.l.google.com:19302' },
         { urls: 'stun:stun1.l.google.com:19302' },
+        { urls: 'turn:openrelay.metered.ca:80', username: 'openrelayproject', credential: 'openrelayproject' },
+        { urls: 'turn:openrelay.metered.ca:443', username: 'openrelayproject', credential: 'openrelayproject' },
+        { urls: 'turn:openrelay.metered.ca:443?transport=tcp', username: 'openrelayproject', credential: 'openrelayproject' },
       ],
     });
 
@@ -268,7 +296,8 @@ export default function KobeyaRoom({ room, onLeave }: KobeyaRoomProps) {
           audioElemsRef.current.delete(peerId);
           setVoiceUsers((prev) => prev.filter((u) => u.id !== peerId));
         })
-        .subscribe(() => {
+        .subscribe((status) => {
+          if (status !== 'SUBSCRIBED') return;
           setVoiceUsers([{ id: myId, name: myName }]);
           channel.send({ type: 'broadcast', event: 'voice_join',
             payload: { from: myId, name: myName } });
