@@ -4,6 +4,18 @@ import { useState, useEffect, useRef } from "react";
 import { TOPICS, type Topic } from "@/data/posts";
 import { createClient } from "@/lib/supabase/client";
 
+// Jitsi Meet External API type
+interface JitsiAPI {
+  dispose: () => void;
+  executeCommand: (command: string, ...args: unknown[]) => void;
+  on: (event: string, listener: () => void) => void;
+}
+declare global {
+  interface Window {
+    JitsiMeetExternalAPI: new (domain: string, options: Record<string, unknown>) => JitsiAPI;
+  }
+}
+
 export interface Room {
   id: number;
   topic: Topic;
@@ -34,6 +46,20 @@ function timeLabel(ts: string) {
   return new Date(ts).toLocaleTimeString('ja-JP', { hour: '2-digit', minute: '2-digit' });
 }
 
+function loadJitsiScript(cb: () => void) {
+  if (window.JitsiMeetExternalAPI) { cb(); return; }
+  const existing = document.querySelector('script[data-jitsi-api]');
+  if (existing) {
+    existing.addEventListener('load', cb, { once: true });
+    return;
+  }
+  const s = document.createElement('script');
+  s.src = 'https://meet.jit.si/external_api.js';
+  s.setAttribute('data-jitsi-api', '1');
+  s.addEventListener('load', cb, { once: true });
+  document.head.appendChild(s);
+}
+
 export default function KobeyaRoom({ room, onLeave }: KobeyaRoomProps) {
   const topicMeta = TOPICS.find((t) => t.id === room.topic) ?? TOPICS[TOPICS.length - 1];
   const supabase = createClient();
@@ -43,11 +69,13 @@ export default function KobeyaRoom({ room, onLeave }: KobeyaRoomProps) {
   const [loadingMsgs, setLoadingMsgs] = useState(true);
   const [activeUsers, setActiveUsers] = useState<ActiveUser[]>([]);
   const [voiceActive, setVoiceActive] = useState(false);
+  const [voiceUserName, setVoiceUserName] = useState('');
   const bottomRef = useRef<HTMLDivElement>(null);
+  const jitsiContainerRef = useRef<HTMLDivElement>(null);
+  const jitsiApiRef = useRef<JitsiAPI | null>(null);
   const chatChannelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
   const presenceChannelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
 
-  // Stable refs to avoid stale closures
   const [currentUser, setCurrentUser] = useState<{ id: string; name: string } | null>(null);
   const myPresenceId = useRef(`u_${Math.random().toString(36).slice(2, 10)}`);
   const displayNameRef = useRef('にんげんさん');
@@ -98,14 +126,9 @@ export default function KobeyaRoom({ room, onLeave }: KobeyaRoomProps) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [room.id]);
 
-  // Presence via Broadcast — reliable alternative to Supabase Presence
-  // Protocol:
-  //   user_join  → broadcaster announces they joined; others respond with user_here
-  //   user_here  → response to user_join; announces existing presence to newcomers
-  //   user_leave → broadcaster announces they left
+  // Presence via Broadcast
   useEffect(() => {
     const myId = myPresenceId.current;
-
     const ch = supabase.channel(`room_presence_${room.id}`, {
       config: { broadcast: { self: false } },
     })
@@ -114,7 +137,6 @@ export default function KobeyaRoom({ room, onLeave }: KobeyaRoomProps) {
           if (prev.some((u) => u.id === payload.id)) return prev;
           return [...prev, { id: payload.id, name: payload.name }];
         });
-        // Let the newcomer know we exist (use ref to get current name)
         ch.send({ type: 'broadcast', event: 'user_here',
           payload: { id: myId, name: displayNameRef.current } });
       })
@@ -129,19 +151,13 @@ export default function KobeyaRoom({ room, onLeave }: KobeyaRoomProps) {
       })
       .subscribe((status) => {
         if (status !== 'SUBSCRIBED') return;
-        // Add self immediately (self: false means we won't receive our own join)
         setActiveUsers([{ id: myId, name: displayNameRef.current }]);
-        // Announce to others
         ch.send({ type: 'broadcast', event: 'user_join',
           payload: { id: myId, name: displayNameRef.current } });
       });
-
     presenceChannelRef.current = ch;
-
     return () => {
-      try {
-        ch.send({ type: 'broadcast', event: 'user_leave', payload: { id: myId } });
-      } catch { /* channel may already be closing */ }
+      try { ch.send({ type: 'broadcast', event: 'user_leave', payload: { id: myId } }); } catch { /* ok */ }
       supabase.removeChannel(ch);
       presenceChannelRef.current = null;
     };
@@ -154,11 +170,65 @@ export default function KobeyaRoom({ room, onLeave }: KobeyaRoomProps) {
     const myId = myPresenceId.current;
     displayNameRef.current = currentUser.name;
     setActiveUsers((prev) => prev.map((u) => u.id === myId ? { ...u, name: currentUser.name } : u));
-    presenceChannelRef.current?.send({
-      type: 'broadcast', event: 'user_here',
-      payload: { id: myId, name: currentUser.name },
-    });
+    presenceChannelRef.current?.send({ type: 'broadcast', event: 'user_here',
+      payload: { id: myId, name: currentUser.name } });
   }, [currentUser]);
+
+  // Initialize Jitsi via External API when voice activates
+  useEffect(() => {
+    if (!voiceActive || !voiceUserName) return;
+
+    let disposed = false;
+
+    const init = () => {
+      if (disposed || !window.JitsiMeetExternalAPI || !jitsiContainerRef.current || jitsiApiRef.current) return;
+
+      const api = new window.JitsiMeetExternalAPI('meet.jit.si', {
+        roomName: `ibasho-kobeya-${room.id}`,
+        parentNode: jitsiContainerRef.current,
+        width: '100%',
+        height: 220,
+        configOverwrite: {
+          prejoinPageEnabled: false,
+          startWithVideoMuted: true,
+          startWithAudioMuted: false,
+          startAudioOnly: true,
+          disableVideo: true,
+          toolbarButtons: ['microphone', 'hangup'],
+          defaultLanguage: 'ja',
+          disableDeepLinking: true,
+          hideConferenceSubject: true,
+          hideConferenceTimer: true,
+          disableInviteFunctions: true,
+          doNotStoreRoom: true,
+        },
+        interfaceConfigOverwrite: {
+          TOOLBAR_BUTTONS: ['microphone', 'hangup'],
+          SHOW_JITSI_WATERMARK: false,
+          SHOW_WATERMARK_FOR_GUESTS: false,
+          SHOW_BRAND_WATERMARK: false,
+          MOBILE_APP_PROMO: false,
+          SHOW_CHROME_EXTENSION_BANNER: false,
+          DISABLE_JOIN_LEAVE_NOTIFICATIONS: false,
+          DEFAULT_REMOTE_DISPLAY_NAME: 'ゲスト',
+        },
+        userInfo: { displayName: voiceUserName },
+      });
+
+      jitsiApiRef.current = api;
+      api.on('videoConferenceLeft', () => setVoiceActive(false));
+      api.on('readyToClose', () => setVoiceActive(false));
+    };
+
+    loadJitsiScript(init);
+
+    return () => {
+      disposed = true;
+      jitsiApiRef.current?.dispose();
+      jitsiApiRef.current = null;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [voiceActive, voiceUserName, room.id]);
 
   // Auto scroll
   useEffect(() => {
@@ -182,7 +252,18 @@ export default function KobeyaRoom({ room, onLeave }: KobeyaRoomProps) {
     }
   };
 
-  const jitsiSrc = `https://meet.jit.si/ibasho-kobeya-${room.id}#config.startWithVideoMuted=true&config.prejoinPageEnabled=false&config.disableVideo=true&config.startAudioOnly=true&userInfo.displayName=${encodeURIComponent(currentUser?.name ?? 'にんげんさん')}`;
+  const joinVoice = () => {
+    if (!currentUser) return;
+    setVoiceUserName(currentUser.name);
+    setVoiceActive(true);
+  };
+
+  const leaveVoice = () => {
+    jitsiApiRef.current?.dispose();
+    jitsiApiRef.current = null;
+    setVoiceActive(false);
+    setVoiceUserName('');
+  };
 
   return (
     <div className="max-w-2xl mx-auto flex flex-col" style={{ minHeight: "calc(100vh - 120px)" }}>
@@ -230,12 +311,12 @@ export default function KobeyaRoom({ room, onLeave }: KobeyaRoomProps) {
           </div>
         )}
 
-        {/* Voice chat via Jitsi Meet */}
+        {/* Voice chat */}
         <div className="mt-3 pt-3 border-t border-gray-100">
           {!voiceActive ? (
             <div className="flex items-center gap-2">
               <button
-                onClick={() => setVoiceActive(true)}
+                onClick={joinVoice}
                 disabled={!currentUser}
                 className="flex items-center gap-1.5 px-3 py-1.5 bg-violet-600 hover:bg-violet-700 disabled:opacity-40 disabled:cursor-not-allowed text-white text-[12px] font-semibold rounded-lg transition-colors"
               >
@@ -248,24 +329,25 @@ export default function KobeyaRoom({ room, onLeave }: KobeyaRoomProps) {
           ) : (
             <div>
               <div className="flex items-center justify-between mb-2">
-                <div className="flex items-center gap-1.5 text-[12px] font-semibold text-violet-700">
-                  <span className="animate-pulse">🔴</span> 音声通話中
-                </div>
+                <span className="flex items-center gap-1.5 text-[12px] font-semibold text-violet-700">
+                  <span className="inline-block w-2 h-2 rounded-full bg-red-500 animate-pulse" />
+                  音声通話中
+                </span>
                 <button
-                  onClick={() => setVoiceActive(false)}
-                  className="text-[11px] text-gray-400 hover:text-red-500 transition-colors px-2 py-1 rounded"
+                  onClick={leaveVoice}
+                  className="text-[11px] text-gray-400 hover:text-red-500 transition-colors border border-gray-200 hover:border-red-200 px-2 py-0.5 rounded-md"
                 >
                   退出
                 </button>
               </div>
-              <iframe
-                src={jitsiSrc}
-                allow="camera; microphone; fullscreen; display-capture; autoplay"
-                style={{ width: '100%', height: '260px', border: 'none', borderRadius: '12px' }}
-                title="音声通話"
+              {/* Jitsi External API mounts here */}
+              <div
+                ref={jitsiContainerRef}
+                className="rounded-xl overflow-hidden border border-violet-100"
+                style={{ height: '220px' }}
               />
               <p className="text-[10px] text-gray-400 mt-1.5 text-center">
-                🎤 マイクボタンでミュート切替 · 電話ボタンで退出
+                🎙️ マイクボタンでミュート切替　📞 電話ボタンで退出
               </p>
             </div>
           )}
