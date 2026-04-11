@@ -65,6 +65,7 @@ export default function KobeyaRoom({ room, onLeave }: KobeyaRoomProps) {
   const [voiceUsers, setVoiceUsers] = useState<{ id: string; name: string }[]>([]);
   const [voiceMuted, setVoiceMuted] = useState(false);
   const [voiceError, setVoiceError] = useState('');
+  const [voicePermDenied, setVoicePermDenied] = useState(false);
   const localStreamRef = useRef<MediaStream | null>(null);
   const peersRef = useRef<Map<string, PeerState>>(new Map());
   const audioElemsRef = useRef<Map<string, HTMLAudioElement>>(new Map());
@@ -223,6 +224,7 @@ export default function KobeyaRoom({ room, onLeave }: KobeyaRoomProps) {
 
   const joinVoice = async () => {
     setVoiceError('');
+    setVoicePermDenied(false);
 
     if (!currentUser) {
       setVoiceError('ボイスチャットにはログインが必要です');
@@ -304,8 +306,15 @@ export default function KobeyaRoom({ room, onLeave }: KobeyaRoomProps) {
         });
 
       setVoiceActive(true);
-    } catch {
-      setVoiceError('マイクへのアクセスが拒否されました。ブラウザの設定を確認してください。');
+    } catch (err) {
+      const name = err instanceof Error ? err.name : '';
+      if (name === 'NotAllowedError' || name === 'PermissionDeniedError') {
+        setVoicePermDenied(true);
+      } else if (name === 'NotFoundError') {
+        setVoiceError('マイクが見つかりません。接続を確認してください。');
+      } else {
+        setVoiceError('マイクを起動できませんでした。');
+      }
     }
   };
 
@@ -379,6 +388,26 @@ export default function KobeyaRoom({ room, onLeave }: KobeyaRoomProps) {
 
         {/* Voice chat */}
         <div className="mt-3 pt-3 border-t border-gray-100">
+          {voicePermDenied ? (
+            <div className="bg-red-50 border border-red-200 rounded-xl p-3 mb-2">
+              <p className="text-[12px] font-semibold text-red-600 mb-1">🎙️ マイクへのアクセスが拒否されています</p>
+              <p className="text-[11px] text-red-500 leading-relaxed mb-2">
+                ブラウザの設定でマイクを許可してから、もう一度お試しください。
+              </p>
+              <div className="text-[11px] text-gray-500 space-y-0.5 mb-3">
+                <p className="font-medium text-gray-600">設定方法：</p>
+                <p>📱 <span className="font-medium">Safari（iOS）</span>：設定アプリ → Safari → マイク → ibasho.co.jp を許可</p>
+                <p>🖥️ <span className="font-medium">Chrome</span>：アドレスバーの 🔒 → マイク → 許可</p>
+                <p>🦊 <span className="font-medium">Firefox</span>：アドレスバーの 🔒 → マイクのアクセス許可 → 許可</p>
+              </div>
+              <button
+                onClick={joinVoice}
+                className="text-[12px] px-3 py-1.5 bg-red-600 hover:bg-red-700 text-white rounded-lg font-semibold transition-colors"
+              >
+                もう一度試す
+              </button>
+            </div>
+          ) : null}
           {voiceError && (
             <div className="mb-2 text-[11px] text-red-500 flex items-center gap-1">
               <span>⚠️</span> {voiceError}
@@ -387,7 +416,7 @@ export default function KobeyaRoom({ room, onLeave }: KobeyaRoomProps) {
               )}
             </div>
           )}
-          {!voiceActive ? (
+          {!voiceActive && !voicePermDenied ? (
             <div className="flex items-center gap-2">
               <button
                 onClick={joinVoice}
