@@ -1,7 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef, useCallback } from "react";
-import Link from "next/link";
+import { useState, useEffect, useRef } from "react";
 import { TOPICS, type Topic } from "@/data/posts";
 import { createClient } from "@/lib/supabase/client";
 
@@ -21,10 +20,9 @@ interface Message {
   created_at: string;
 }
 
-interface PresenceUser {
-  userId: string;
-  displayName: string;
-  joinedAt: number;
+interface ActiveUser {
+  id: string;
+  name: string;
 }
 
 interface KobeyaRoomProps {
@@ -32,17 +30,9 @@ interface KobeyaRoomProps {
   onLeave: () => void;
 }
 
-interface PeerState {
-  conn: RTCPeerConnection;
-  stream?: MediaStream;
-  displayName: string;
-}
-
 function timeLabel(ts: string) {
   return new Date(ts).toLocaleTimeString('ja-JP', { hour: '2-digit', minute: '2-digit' });
 }
-
-const MAX_VOICE_USERS = 6;
 
 export default function KobeyaRoom({ room, onLeave }: KobeyaRoomProps) {
   const topicMeta = TOPICS.find((t) => t.id === room.topic) ?? TOPICS[TOPICS.length - 1];
@@ -51,34 +41,16 @@ export default function KobeyaRoom({ room, onLeave }: KobeyaRoomProps) {
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
   const [loadingMsgs, setLoadingMsgs] = useState(true);
-  const [activeUsers, setActiveUsers] = useState<PresenceUser[]>([]);
-  const bottomRef = useRef<HTMLDivElement>(null);
-  const presenceChannelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
-  const chatChannelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
-
-  // Current user
-  const [currentUser, setCurrentUser] = useState<{ id: string; name: string } | null>(null);
-  const myPresenceId = useRef(Math.random().toString(36).slice(2, 8));
-
-  // Voice chat
+  const [activeUsers, setActiveUsers] = useState<ActiveUser[]>([]);
   const [voiceActive, setVoiceActive] = useState(false);
-  const [voiceUsers, setVoiceUsers] = useState<{ id: string; name: string }[]>([]);
-  const [voiceMuted, setVoiceMuted] = useState(false);
-  const [voiceError, setVoiceError] = useState('');
-  const [voicePermDenied, setVoicePermDenied] = useState(false);
-  const [micVolume, setMicVolume] = useState(0); // 0-100
-  const [voiceToast, setVoiceToast] = useState('');
-  const localStreamRef = useRef<MediaStream | null>(null);
-  const peersRef = useRef<Map<string, PeerState>>(new Map());
-  const audioElemsRef = useRef<Map<string, HTMLAudioElement>>(new Map());
-  const voiceChannelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
-  const audioContextRef = useRef<AudioContext | null>(null);
-  const analyserRef = useRef<AnalyserNode | null>(null);
-  const volAnimRef = useRef<number | null>(null);
-  const voiceToastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const prevVoiceUsersRef = useRef<{ id: string; name: string }[]>([]);
-  // Buffer ICE candidates until remote description is set
-  const iceCandidateBuffersRef = useRef<Map<string, RTCIceCandidateInit[]>>(new Map());
+  const bottomRef = useRef<HTMLDivElement>(null);
+  const chatChannelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
+  const presenceChannelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
+
+  // Stable refs to avoid stale closures
+  const [currentUser, setCurrentUser] = useState<{ id: string; name: string } | null>(null);
+  const myPresenceId = useRef(`u_${Math.random().toString(36).slice(2, 10)}`);
+  const displayNameRef = useRef('にんげんさん');
 
   // Get current user
   useEffect(() => {
@@ -87,6 +59,7 @@ export default function KobeyaRoom({ room, onLeave }: KobeyaRoomProps) {
       if (u) {
         const name = u.user_metadata?.display_name ?? u.user_metadata?.full_name ?? u.email?.split('@')[0] ?? 'ゲスト';
         setCurrentUser({ id: u.id, name });
+        displayNameRef.current = name;
       }
     });
   }, []);
@@ -105,7 +78,7 @@ export default function KobeyaRoom({ room, onLeave }: KobeyaRoomProps) {
       });
   }, [room.id]);
 
-  // Realtime chat via Broadcast (postgres_changes requires publication setup; broadcast works without it)
+  // Realtime chat via Broadcast
   useEffect(() => {
     const ch = supabase.channel(`chat_broadcast_${room.id}`, {
       config: { broadcast: { self: false } },
@@ -125,49 +98,65 @@ export default function KobeyaRoom({ room, onLeave }: KobeyaRoomProps) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [room.id]);
 
-  // Presence — subscribe once on room enter, update track when user loads
+  // Presence via Broadcast — reliable alternative to Supabase Presence
+  // Protocol:
+  //   user_join  → broadcaster announces they joined; others respond with user_here
+  //   user_here  → response to user_join; announces existing presence to newcomers
+  //   user_leave → broadcaster announces they left
   useEffect(() => {
-    const ch = supabase.channel(`presence_room_${room.id}`, {
-      config: { presence: { key: myPresenceId.current } },
-    });
-    presenceChannelRef.current = ch;
+    const myId = myPresenceId.current;
 
-    const refreshPresence = () => {
-      const state = ch.presenceState<PresenceUser>();
-      const users: PresenceUser[] = [];
-      Object.values(state).forEach((entries) => entries.forEach((e) => users.push(e)));
-      setActiveUsers(users);
-    };
-
-    ch.on('presence', { event: 'sync' }, refreshPresence)
-      .on('presence', { event: 'join' }, refreshPresence)
-      .on('presence', { event: 'leave' }, refreshPresence)
-      .subscribe(async (status) => {
-        if (status === 'SUBSCRIBED') {
-          await ch.track({
-            userId: myPresenceId.current,
-            displayName: 'にんげんさん',
-            joinedAt: Date.now(),
-          });
-          // Force refresh after track resolves (sync may fire before track completes)
-          refreshPresence();
-        }
+    const ch = supabase.channel(`room_presence_${room.id}`, {
+      config: { broadcast: { self: false } },
+    })
+      .on('broadcast', { event: 'user_join' }, ({ payload }) => {
+        setActiveUsers((prev) => {
+          if (prev.some((u) => u.id === payload.id)) return prev;
+          return [...prev, { id: payload.id, name: payload.name }];
+        });
+        // Let the newcomer know we exist (use ref to get current name)
+        ch.send({ type: 'broadcast', event: 'user_here',
+          payload: { id: myId, name: displayNameRef.current } });
+      })
+      .on('broadcast', { event: 'user_here' }, ({ payload }) => {
+        setActiveUsers((prev) => {
+          if (prev.some((u) => u.id === payload.id)) return prev;
+          return [...prev, { id: payload.id, name: payload.name }];
+        });
+      })
+      .on('broadcast', { event: 'user_leave' }, ({ payload }) => {
+        setActiveUsers((prev) => prev.filter((u) => u.id !== payload.id));
+      })
+      .subscribe((status) => {
+        if (status !== 'SUBSCRIBED') return;
+        // Add self immediately (self: false means we won't receive our own join)
+        setActiveUsers([{ id: myId, name: displayNameRef.current }]);
+        // Announce to others
+        ch.send({ type: 'broadcast', event: 'user_join',
+          payload: { id: myId, name: displayNameRef.current } });
       });
 
+    presenceChannelRef.current = ch;
+
     return () => {
+      try {
+        ch.send({ type: 'broadcast', event: 'user_leave', payload: { id: myId } });
+      } catch { /* channel may already be closing */ }
       supabase.removeChannel(ch);
       presenceChannelRef.current = null;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [room.id]);
 
-  // Update presence display name once user info loads
+  // Re-announce with real name once user info loads
   useEffect(() => {
-    if (!currentUser || !presenceChannelRef.current) return;
-    presenceChannelRef.current.track({
-      userId: myPresenceId.current,
-      displayName: currentUser.name,
-      joinedAt: Date.now(),
+    if (!currentUser) return;
+    const myId = myPresenceId.current;
+    displayNameRef.current = currentUser.name;
+    setActiveUsers((prev) => prev.map((u) => u.id === myId ? { ...u, name: currentUser.name } : u));
+    presenceChannelRef.current?.send({
+      type: 'broadcast', event: 'user_here',
+      payload: { id: myId, name: currentUser.name },
     });
   }, [currentUser]);
 
@@ -176,61 +165,12 @@ export default function KobeyaRoom({ room, onLeave }: KobeyaRoomProps) {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
 
-  // Voice notifications on join/leave
-  useEffect(() => {
-    const prev = prevVoiceUsersRef.current;
-    const myId = myPresenceId.current;
-    const added = voiceUsers.filter((u) => u.id !== myId && !prev.some((p) => p.id === u.id));
-    const removed = prev.filter((u) => u.id !== myId && !voiceUsers.some((v) => v.id === u.id));
-    if (added.length > 0) {
-      const msg = `🎤 ${added.map((u) => u.name).join('、')}さんが参加しました`;
-      setVoiceToast(msg);
-      if (voiceToastTimerRef.current) clearTimeout(voiceToastTimerRef.current);
-      voiceToastTimerRef.current = setTimeout(() => setVoiceToast(''), 4000);
-    } else if (removed.length > 0) {
-      const msg = `👋 ${removed.map((u) => u.name).join('、')}さんが退出しました`;
-      setVoiceToast(msg);
-      if (voiceToastTimerRef.current) clearTimeout(voiceToastTimerRef.current);
-      voiceToastTimerRef.current = setTimeout(() => setVoiceToast(''), 4000);
-    }
-    prevVoiceUsersRef.current = voiceUsers;
-  }, [voiceUsers]);
-
-  const startVolumeMeter = (stream: MediaStream) => {
-    try {
-      const ctx = new AudioContext();
-      const analyser = ctx.createAnalyser();
-      analyser.fftSize = 512;
-      analyser.smoothingTimeConstant = 0.4;
-      ctx.createMediaStreamSource(stream).connect(analyser);
-      audioContextRef.current = ctx;
-      analyserRef.current = analyser;
-      const data = new Uint8Array(analyser.frequencyBinCount);
-      const tick = () => {
-        analyser.getByteFrequencyData(data);
-        const avg = data.slice(0, 60).reduce((a, b) => a + b, 0) / 60;
-        setMicVolume(Math.min(100, avg * 2.5));
-        volAnimRef.current = requestAnimationFrame(tick);
-      };
-      volAnimRef.current = requestAnimationFrame(tick);
-    } catch { /* AudioContext unavailable */ }
-  };
-
-  const stopVolumeMeter = () => {
-    if (volAnimRef.current) { cancelAnimationFrame(volAnimRef.current); volAnimRef.current = null; }
-    audioContextRef.current?.close();
-    audioContextRef.current = null;
-    analyserRef.current = null;
-    setMicVolume(0);
-  };
-
   const handlePost = async () => {
     const text = input.trim();
     if (!text) return;
     setInput('');
     const name = currentUser?.name ?? 'にんげんさん';
 
-    // Optimistic update so sender sees message immediately
     const tempId = -Date.now();
     const optimistic: Message = { id: tempId, room_id: room.id, body: text, name, created_at: new Date().toISOString() };
     setMessages((prev) => [...prev, optimistic]);
@@ -242,207 +182,7 @@ export default function KobeyaRoom({ room, onLeave }: KobeyaRoomProps) {
     }
   };
 
-  // ---- Voice Chat (WebRTC) ----
-  const createPeerConnection = useCallback((peerId: string, peerName: string): RTCPeerConnection => {
-    const pc = new RTCPeerConnection({
-      iceServers: [
-        { urls: 'stun:stun.l.google.com:19302' },
-        { urls: 'stun:stun1.l.google.com:19302' },
-        { urls: 'turn:openrelay.metered.ca:80', username: 'openrelayproject', credential: 'openrelayproject' },
-        { urls: 'turn:openrelay.metered.ca:443', username: 'openrelayproject', credential: 'openrelayproject' },
-        { urls: 'turn:openrelay.metered.ca:443?transport=tcp', username: 'openrelayproject', credential: 'openrelayproject' },
-      ],
-    });
-
-    if (localStreamRef.current) {
-      localStreamRef.current.getTracks().forEach((t) => pc.addTrack(t, localStreamRef.current!));
-    }
-
-    pc.ontrack = (e) => {
-      let audio = audioElemsRef.current.get(peerId);
-      if (!audio) {
-        // DOM-attached audio element is required for iOS Safari autoplay
-        audio = document.createElement('audio');
-        audio.autoplay = true;
-        audio.setAttribute('playsinline', '');
-        audio.style.cssText = 'position:absolute;width:0;height:0;opacity:0;';
-        document.body.appendChild(audio);
-        audioElemsRef.current.set(peerId, audio);
-      }
-      audio.srcObject = e.streams[0];
-      audio.play().catch(() => {});
-    };
-
-    pc.onicecandidate = (e) => {
-      if (e.candidate && voiceChannelRef.current) {
-        voiceChannelRef.current.send({
-          type: 'broadcast', event: 'ice',
-          payload: { to: peerId, from: myPresenceId.current, candidate: e.candidate },
-        });
-      }
-    };
-
-    pc.onconnectionstatechange = () => {
-      if (pc.connectionState === 'disconnected' || pc.connectionState === 'failed') {
-        peersRef.current.delete(peerId);
-        setVoiceUsers((prev) => prev.filter((u) => u.id !== peerId));
-      }
-    };
-
-    peersRef.current.set(peerId, { conn: pc, displayName: peerName });
-    return pc;
-  }, []);
-
-  const joinVoice = async () => {
-    setVoiceError('');
-    setVoicePermDenied(false);
-
-    if (!currentUser) {
-      setVoiceError('ボイスチャットにはログインが必要です');
-      return;
-    }
-
-    // Check current voice user count
-    if (voiceUsers.length >= MAX_VOICE_USERS) {
-      setVoiceError(`ボイスチャットは最大${MAX_VOICE_USERS}人までです`);
-      return;
-    }
-
-    try {
-      // Resume (or create) AudioContext in user gesture scope — required for iOS Safari autoplay
-      if (audioContextRef.current && audioContextRef.current.state === 'suspended') {
-        await audioContextRef.current.resume();
-      }
-
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
-      localStreamRef.current = stream;
-      startVolumeMeter(stream);
-
-      const channel = supabase.channel(`voice_${room.id}`, {
-        config: { broadcast: { self: false } },
-      });
-      voiceChannelRef.current = channel;
-
-      const myId = myPresenceId.current;
-      const myName = currentUser.name;
-
-      channel
-        .on('broadcast', { event: 'voice_join' }, async ({ payload }) => {
-          if (payload.from === myId) return;
-          const peerId: string = payload.from;
-          const peerName: string = payload.name ?? 'ゲスト';
-          setVoiceUsers((prev) => {
-            if (prev.some((u) => u.id === peerId)) return prev;
-            if (prev.length >= MAX_VOICE_USERS) return prev;
-            return [...prev, { id: peerId, name: peerName }];
-          });
-          const pc = createPeerConnection(peerId, peerName);
-          const offer = await pc.createOffer();
-          await pc.setLocalDescription(offer);
-          channel.send({ type: 'broadcast', event: 'voice_offer',
-            payload: { to: peerId, from: myId, fromName: myName, sdp: offer } });
-        })
-        .on('broadcast', { event: 'voice_offer' }, async ({ payload }) => {
-          if (payload.to !== myId) return;
-          const peerId: string = payload.from;
-          const peerName: string = payload.fromName ?? 'ゲスト';
-          setVoiceUsers((prev) => {
-            if (prev.some((u) => u.id === peerId)) return prev;
-            if (prev.length >= MAX_VOICE_USERS) return prev;
-            return [...prev, { id: peerId, name: peerName }];
-          });
-          const pc = createPeerConnection(peerId, peerName);
-          await pc.setRemoteDescription(new RTCSessionDescription(payload.sdp));
-          // Flush buffered ICE candidates that arrived before the offer was processed
-          const buffered = iceCandidateBuffersRef.current.get(peerId) ?? [];
-          for (const c of buffered) { await pc.addIceCandidate(new RTCIceCandidate(c)).catch(() => {}); }
-          iceCandidateBuffersRef.current.delete(peerId);
-          const answer = await pc.createAnswer();
-          await pc.setLocalDescription(answer);
-          channel.send({ type: 'broadcast', event: 'voice_answer',
-            payload: { to: peerId, from: myId, sdp: answer } });
-        })
-        .on('broadcast', { event: 'voice_answer' }, async ({ payload }) => {
-          if (payload.to !== myId) return;
-          const peer = peersRef.current.get(payload.from);
-          if (!peer) return;
-          await peer.conn.setRemoteDescription(new RTCSessionDescription(payload.sdp));
-          // Flush buffered ICE candidates
-          const buffered = iceCandidateBuffersRef.current.get(payload.from) ?? [];
-          for (const c of buffered) { await peer.conn.addIceCandidate(new RTCIceCandidate(c)).catch(() => {}); }
-          iceCandidateBuffersRef.current.delete(payload.from);
-        })
-        .on('broadcast', { event: 'ice' }, async ({ payload }) => {
-          if (payload.to !== myId) return;
-          const peer = peersRef.current.get(payload.from);
-          if (peer && peer.conn.remoteDescription) {
-            await peer.conn.addIceCandidate(new RTCIceCandidate(payload.candidate)).catch(() => {});
-          } else {
-            // Remote description not set yet — buffer the candidate
-            const buf = iceCandidateBuffersRef.current.get(payload.from) ?? [];
-            buf.push(payload.candidate);
-            iceCandidateBuffersRef.current.set(payload.from, buf);
-          }
-        })
-        .on('broadcast', { event: 'voice_leave' }, ({ payload }) => {
-          const peerId: string = payload.from;
-          peersRef.current.get(peerId)?.conn.close();
-          peersRef.current.delete(peerId);
-          audioElemsRef.current.delete(peerId);
-          setVoiceUsers((prev) => prev.filter((u) => u.id !== peerId));
-        })
-        .subscribe((status) => {
-          if (status !== 'SUBSCRIBED') return;
-          setVoiceUsers([{ id: myId, name: myName }]);
-          channel.send({ type: 'broadcast', event: 'voice_join',
-            payload: { from: myId, name: myName } });
-        });
-
-      setVoiceActive(true);
-    } catch (err) {
-      const name = err instanceof Error ? err.name : '';
-      if (name === 'NotAllowedError' || name === 'PermissionDeniedError') {
-        setVoicePermDenied(true);
-      } else if (name === 'NotFoundError') {
-        setVoiceError('マイクが見つかりません。接続を確認してください。');
-      } else {
-        setVoiceError('マイクを起動できませんでした。');
-      }
-    }
-  };
-
-  const leaveVoice = useCallback(() => {
-    if (voiceChannelRef.current) {
-      voiceChannelRef.current.send({
-        type: 'broadcast', event: 'voice_leave',
-        payload: { from: myPresenceId.current },
-      });
-      supabase.removeChannel(voiceChannelRef.current);
-      voiceChannelRef.current = null;
-    }
-    stopVolumeMeter();
-    if (voiceToastTimerRef.current) { clearTimeout(voiceToastTimerRef.current); voiceToastTimerRef.current = null; }
-    localStreamRef.current?.getTracks().forEach((t) => t.stop());
-    localStreamRef.current = null;
-    Array.from(peersRef.current.values()).forEach(({ conn }) => conn.close());
-    peersRef.current.clear();
-    Array.from(audioElemsRef.current.values()).forEach((a) => { a.srcObject = null; a.remove(); });
-    audioElemsRef.current.clear();
-    iceCandidateBuffersRef.current.clear();
-    setVoiceActive(false);
-    setVoiceUsers([]);
-    setVoiceToast('');
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  const leaveVoiceRef = useRef(leaveVoice);
-  leaveVoiceRef.current = leaveVoice;
-  useEffect(() => () => { leaveVoiceRef.current(); }, []);
-
-  const toggleMute = () => {
-    localStreamRef.current?.getAudioTracks().forEach((t) => { t.enabled = voiceMuted; });
-    setVoiceMuted(!voiceMuted);
-  };
+  const jitsiSrc = `https://meet.jit.si/ibasho-kobeya-${room.id}#config.startWithVideoMuted=true&config.prejoinPageEnabled=false&config.disableVideo=true&config.startAudioOnly=true&userInfo.displayName=${encodeURIComponent(currentUser?.name ?? 'にんげんさん')}`;
 
   return (
     <div className="max-w-2xl mx-auto flex flex-col" style={{ minHeight: "calc(100vh - 120px)" }}>
@@ -472,52 +212,32 @@ export default function KobeyaRoom({ room, onLeave }: KobeyaRoomProps) {
           </div>
         </div>
 
-        {/* Active users list */}
+        {/* Active users */}
         {activeUsers.length > 0 && (
           <div className="mt-2 flex flex-wrap gap-1.5">
             {activeUsers.map((u) => (
-              <span key={u.userId} className="text-[10px] px-2 py-0.5 bg-gray-100 text-gray-600 rounded-full">
-                {u.displayName}
+              <span
+                key={u.id}
+                className={`text-[10px] px-2 py-0.5 rounded-full border font-medium ${
+                  u.id === myPresenceId.current
+                    ? 'bg-teal-50 text-teal-600 border-teal-200'
+                    : 'bg-gray-100 text-gray-600 border-gray-200'
+                }`}
+              >
+                {u.name}{u.id === myPresenceId.current ? ' (自分)' : ''}
               </span>
             ))}
           </div>
         )}
 
-        {/* Voice chat */}
+        {/* Voice chat via Jitsi Meet */}
         <div className="mt-3 pt-3 border-t border-gray-100">
-          {voicePermDenied ? (
-            <div className="bg-red-50 border border-red-200 rounded-xl p-3 mb-2">
-              <p className="text-[12px] font-semibold text-red-600 mb-1">🎙️ マイクへのアクセスが拒否されています</p>
-              <p className="text-[11px] text-red-500 leading-relaxed mb-2">
-                ブラウザの設定でマイクを許可してから、もう一度お試しください。
-              </p>
-              <div className="text-[11px] text-gray-500 space-y-0.5 mb-3">
-                <p className="font-medium text-gray-600">設定方法：</p>
-                <p>📱 <span className="font-medium">Safari（iOS）</span>：設定アプリ → Safari → マイク → ibasho.co.jp を許可</p>
-                <p>🖥️ <span className="font-medium">Chrome</span>：アドレスバーの 🔒 → マイク → 許可</p>
-                <p>🦊 <span className="font-medium">Firefox</span>：アドレスバーの 🔒 → マイクのアクセス許可 → 許可</p>
-              </div>
-              <button
-                onClick={joinVoice}
-                className="text-[12px] px-3 py-1.5 bg-red-600 hover:bg-red-700 text-white rounded-lg font-semibold transition-colors"
-              >
-                もう一度試す
-              </button>
-            </div>
-          ) : null}
-          {voiceError && (
-            <div className="mb-2 text-[11px] text-red-500 flex items-center gap-1">
-              <span>⚠️</span> {voiceError}
-              {!currentUser && (
-                <Link href="/auth/login" className="underline text-teal-600 ml-1">ログイン</Link>
-              )}
-            </div>
-          )}
-          {!voiceActive && !voicePermDenied ? (
+          {!voiceActive ? (
             <div className="flex items-center gap-2">
               <button
-                onClick={joinVoice}
-                className="flex items-center gap-1.5 px-3 py-1.5 bg-violet-600 hover:bg-violet-700 text-white text-[12px] font-semibold rounded-lg transition-colors"
+                onClick={() => setVoiceActive(true)}
+                disabled={!currentUser}
+                className="flex items-center gap-1.5 px-3 py-1.5 bg-violet-600 hover:bg-violet-700 disabled:opacity-40 disabled:cursor-not-allowed text-white text-[12px] font-semibold rounded-lg transition-colors"
               >
                 🎤 ボイス参加
               </button>
@@ -526,59 +246,27 @@ export default function KobeyaRoom({ room, onLeave }: KobeyaRoomProps) {
               )}
             </div>
           ) : (
-            <div className="space-y-2">
-              {/* Toast notification */}
-              {voiceToast && (
-                <div className="text-[11px] text-violet-700 bg-violet-50 border border-violet-200 rounded-lg px-2.5 py-1.5 font-medium">
-                  {voiceToast}
-                </div>
-              )}
-              <div className="flex items-center gap-2 flex-wrap">
-                <div className="flex items-center gap-1.5 px-3 py-1.5 bg-violet-100 text-violet-700 text-[12px] font-semibold rounded-lg">
-                  <span className="animate-pulse">🔴</span> ライブ中
+            <div>
+              <div className="flex items-center justify-between mb-2">
+                <div className="flex items-center gap-1.5 text-[12px] font-semibold text-violet-700">
+                  <span className="animate-pulse">🔴</span> 音声通話中
                 </div>
                 <button
-                  onClick={toggleMute}
-                  className={`flex items-center gap-1 px-2.5 py-1.5 text-[12px] font-medium rounded-lg border transition-colors ${
-                    voiceMuted ? 'bg-red-50 text-red-600 border-red-200' : 'bg-gray-50 text-gray-600 border-gray-200 hover:bg-gray-100'
-                  }`}
-                >
-                  {voiceMuted ? '🔇 ミュート' : '🔊 発話中'}
-                </button>
-                <button
-                  onClick={leaveVoice}
-                  className="px-2.5 py-1.5 bg-gray-100 hover:bg-gray-200 text-gray-600 text-[12px] font-medium rounded-lg transition-colors"
+                  onClick={() => setVoiceActive(false)}
+                  className="text-[11px] text-gray-400 hover:text-red-500 transition-colors px-2 py-1 rounded"
                 >
                   退出
                 </button>
-                {/* Mic volume gauge */}
-                {!voiceMuted && (
-                  <div className="flex items-end gap-[2px] h-5 ml-1" title="マイク入力レベル">
-                    {Array.from({ length: 10 }).map((_, i) => {
-                      const threshold = (i / 10) * 100;
-                      const active = micVolume > threshold;
-                      const color = i < 5 ? 'bg-green-400' : i < 8 ? 'bg-yellow-400' : 'bg-red-400';
-                      return (
-                        <div
-                          key={i}
-                          className={`w-1.5 rounded-sm transition-all duration-75 ${active ? color : 'bg-gray-200'}`}
-                          style={{ height: `${30 + i * 7}%` }}
-                        />
-                      );
-                    })}
-                  </div>
-                )}
               </div>
-              {/* Voice participants */}
-              <div className="flex flex-wrap gap-1.5">
-                {voiceUsers.map((u) => (
-                  <div key={u.id} className="flex items-center gap-1 text-[11px] px-2 py-1 bg-violet-50 text-violet-700 rounded-full border border-violet-200">
-                    <span className="text-[9px]">{u.id === myPresenceId.current ? (voiceMuted ? '🔇' : '🎤') : '🔊'}</span>
-                    {u.name}
-                    {u.id === myPresenceId.current && <span className="text-[9px] text-violet-400">(自分)</span>}
-                  </div>
-                ))}
-              </div>
+              <iframe
+                src={jitsiSrc}
+                allow="camera; microphone; fullscreen; display-capture; autoplay"
+                style={{ width: '100%', height: '260px', border: 'none', borderRadius: '12px' }}
+                title="音声通話"
+              />
+              <p className="text-[10px] text-gray-400 mt-1.5 text-center">
+                🎤 マイクボタンでミュート切替 · 電話ボタンで退出
+              </p>
             </div>
           )}
         </div>
@@ -603,7 +291,7 @@ export default function KobeyaRoom({ room, onLeave }: KobeyaRoomProps) {
               </div>
               <div className={`max-w-[78%] ${isMe ? "items-end" : "items-start"} flex flex-col gap-1`}>
                 <span className="text-[11px] text-gray-400 px-1">
-                  {isMe ? `${timeLabel(msg.created_at)}` : `${msg.name} · ${timeLabel(msg.created_at)}`}
+                  {isMe ? timeLabel(msg.created_at) : `${msg.name} · ${timeLabel(msg.created_at)}`}
                 </span>
                 <div className={`px-3.5 py-2.5 rounded-2xl text-[13px] leading-relaxed ${
                   isMe
