@@ -66,10 +66,17 @@ export default function KobeyaRoom({ room, onLeave }: KobeyaRoomProps) {
   const [voiceMuted, setVoiceMuted] = useState(false);
   const [voiceError, setVoiceError] = useState('');
   const [voicePermDenied, setVoicePermDenied] = useState(false);
+  const [micVolume, setMicVolume] = useState(0); // 0-100
+  const [voiceToast, setVoiceToast] = useState('');
   const localStreamRef = useRef<MediaStream | null>(null);
   const peersRef = useRef<Map<string, PeerState>>(new Map());
   const audioElemsRef = useRef<Map<string, HTMLAudioElement>>(new Map());
   const voiceChannelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
+  const audioContextRef = useRef<AudioContext | null>(null);
+  const analyserRef = useRef<AnalyserNode | null>(null);
+  const volAnimRef = useRef<number | null>(null);
+  const voiceToastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const prevVoiceUsersRef = useRef<{ id: string; name: string }[]>([]);
 
   // Get current user
   useEffect(() => {
@@ -123,21 +130,27 @@ export default function KobeyaRoom({ room, onLeave }: KobeyaRoomProps) {
     });
     presenceChannelRef.current = ch;
 
-    ch.on('presence', { event: 'sync' }, () => {
+    const refreshPresence = () => {
       const state = ch.presenceState<PresenceUser>();
       const users: PresenceUser[] = [];
       Object.values(state).forEach((entries) => entries.forEach((e) => users.push(e)));
       setActiveUsers(users);
-    })
-    .subscribe(async (status) => {
-      if (status === 'SUBSCRIBED') {
-        await ch.track({
-          userId: myPresenceId.current,
-          displayName: 'にんげんさん',
-          joinedAt: Date.now(),
-        });
-      }
-    });
+    };
+
+    ch.on('presence', { event: 'sync' }, refreshPresence)
+      .on('presence', { event: 'join' }, refreshPresence)
+      .on('presence', { event: 'leave' }, refreshPresence)
+      .subscribe(async (status) => {
+        if (status === 'SUBSCRIBED') {
+          await ch.track({
+            userId: myPresenceId.current,
+            displayName: 'にんげんさん',
+            joinedAt: Date.now(),
+          });
+          // Force refresh after track resolves (sync may fire before track completes)
+          refreshPresence();
+        }
+      });
 
     return () => {
       supabase.removeChannel(ch);
@@ -160,6 +173,54 @@ export default function KobeyaRoom({ room, onLeave }: KobeyaRoomProps) {
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
+
+  // Voice notifications on join/leave
+  useEffect(() => {
+    const prev = prevVoiceUsersRef.current;
+    const myId = myPresenceId.current;
+    const added = voiceUsers.filter((u) => u.id !== myId && !prev.some((p) => p.id === u.id));
+    const removed = prev.filter((u) => u.id !== myId && !voiceUsers.some((v) => v.id === u.id));
+    if (added.length > 0) {
+      const msg = `🎤 ${added.map((u) => u.name).join('、')}さんが参加しました`;
+      setVoiceToast(msg);
+      if (voiceToastTimerRef.current) clearTimeout(voiceToastTimerRef.current);
+      voiceToastTimerRef.current = setTimeout(() => setVoiceToast(''), 4000);
+    } else if (removed.length > 0) {
+      const msg = `👋 ${removed.map((u) => u.name).join('、')}さんが退出しました`;
+      setVoiceToast(msg);
+      if (voiceToastTimerRef.current) clearTimeout(voiceToastTimerRef.current);
+      voiceToastTimerRef.current = setTimeout(() => setVoiceToast(''), 4000);
+    }
+    prevVoiceUsersRef.current = voiceUsers;
+  }, [voiceUsers]);
+
+  const startVolumeMeter = (stream: MediaStream) => {
+    try {
+      const ctx = new AudioContext();
+      const analyser = ctx.createAnalyser();
+      analyser.fftSize = 512;
+      analyser.smoothingTimeConstant = 0.4;
+      ctx.createMediaStreamSource(stream).connect(analyser);
+      audioContextRef.current = ctx;
+      analyserRef.current = analyser;
+      const data = new Uint8Array(analyser.frequencyBinCount);
+      const tick = () => {
+        analyser.getByteFrequencyData(data);
+        const avg = data.slice(0, 60).reduce((a, b) => a + b, 0) / 60;
+        setMicVolume(Math.min(100, avg * 2.5));
+        volAnimRef.current = requestAnimationFrame(tick);
+      };
+      volAnimRef.current = requestAnimationFrame(tick);
+    } catch { /* AudioContext unavailable */ }
+  };
+
+  const stopVolumeMeter = () => {
+    if (volAnimRef.current) { cancelAnimationFrame(volAnimRef.current); volAnimRef.current = null; }
+    audioContextRef.current?.close();
+    audioContextRef.current = null;
+    analyserRef.current = null;
+    setMicVolume(0);
+  };
 
   const handlePost = async () => {
     const text = input.trim();
@@ -240,6 +301,7 @@ export default function KobeyaRoom({ room, onLeave }: KobeyaRoomProps) {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
       localStreamRef.current = stream;
+      startVolumeMeter(stream);
 
       const channel = supabase.channel(`voice_${room.id}`, {
         config: { broadcast: { self: false } },
@@ -327,6 +389,8 @@ export default function KobeyaRoom({ room, onLeave }: KobeyaRoomProps) {
       supabase.removeChannel(voiceChannelRef.current);
       voiceChannelRef.current = null;
     }
+    stopVolumeMeter();
+    if (voiceToastTimerRef.current) { clearTimeout(voiceToastTimerRef.current); voiceToastTimerRef.current = null; }
     localStreamRef.current?.getTracks().forEach((t) => t.stop());
     localStreamRef.current = null;
     Array.from(peersRef.current.values()).forEach(({ conn }) => conn.close());
@@ -335,6 +399,7 @@ export default function KobeyaRoom({ room, onLeave }: KobeyaRoomProps) {
     audioElemsRef.current.clear();
     setVoiceActive(false);
     setVoiceUsers([]);
+    setVoiceToast('');
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -430,6 +495,12 @@ export default function KobeyaRoom({ room, onLeave }: KobeyaRoomProps) {
             </div>
           ) : (
             <div className="space-y-2">
+              {/* Toast notification */}
+              {voiceToast && (
+                <div className="text-[11px] text-violet-700 bg-violet-50 border border-violet-200 rounded-lg px-2.5 py-1.5 font-medium">
+                  {voiceToast}
+                </div>
+              )}
               <div className="flex items-center gap-2 flex-wrap">
                 <div className="flex items-center gap-1.5 px-3 py-1.5 bg-violet-100 text-violet-700 text-[12px] font-semibold rounded-lg">
                   <span className="animate-pulse">🔴</span> ライブ中
@@ -448,6 +519,23 @@ export default function KobeyaRoom({ room, onLeave }: KobeyaRoomProps) {
                 >
                   退出
                 </button>
+                {/* Mic volume gauge */}
+                {!voiceMuted && (
+                  <div className="flex items-end gap-[2px] h-5 ml-1" title="マイク入力レベル">
+                    {Array.from({ length: 10 }).map((_, i) => {
+                      const threshold = (i / 10) * 100;
+                      const active = micVolume > threshold;
+                      const color = i < 5 ? 'bg-green-400' : i < 8 ? 'bg-yellow-400' : 'bg-red-400';
+                      return (
+                        <div
+                          key={i}
+                          className={`w-1.5 rounded-sm transition-all duration-75 ${active ? color : 'bg-gray-200'}`}
+                          style={{ height: `${30 + i * 7}%` }}
+                        />
+                      );
+                    })}
+                  </div>
+                )}
               </div>
               {/* Voice participants */}
               <div className="flex flex-wrap gap-1.5">
