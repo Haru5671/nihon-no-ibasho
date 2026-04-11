@@ -73,7 +73,7 @@ export default function KobeyaRoom({ room, onLeave }: KobeyaRoomProps) {
     supabase.auth.getUser().then(({ data }) => {
       const u = data.user;
       if (u) {
-        const name = u.user_metadata?.full_name ?? u.email?.split('@')[0] ?? 'ゲスト';
+        const name = u.user_metadata?.display_name ?? u.user_metadata?.full_name ?? u.email?.split('@')[0] ?? 'ゲスト';
         setCurrentUser({ id: u.id, name });
       }
     });
