@@ -77,6 +77,8 @@ export default function KobeyaRoom({ room, onLeave }: KobeyaRoomProps) {
   const volAnimRef = useRef<number | null>(null);
   const voiceToastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const prevVoiceUsersRef = useRef<{ id: string; name: string }[]>([]);
+  // Buffer ICE candidates until remote description is set
+  const iceCandidateBuffersRef = useRef<Map<string, RTCIceCandidateInit[]>>(new Map());
 
   // Get current user
   useEffect(() => {
@@ -257,10 +259,18 @@ export default function KobeyaRoom({ room, onLeave }: KobeyaRoomProps) {
     }
 
     pc.ontrack = (e) => {
-      const audio = audioElemsRef.current.get(peerId) ?? new Audio();
+      let audio = audioElemsRef.current.get(peerId);
+      if (!audio) {
+        // DOM-attached audio element is required for iOS Safari autoplay
+        audio = document.createElement('audio');
+        audio.autoplay = true;
+        audio.setAttribute('playsinline', '');
+        audio.style.cssText = 'position:absolute;width:0;height:0;opacity:0;';
+        document.body.appendChild(audio);
+        audioElemsRef.current.set(peerId, audio);
+      }
       audio.srcObject = e.streams[0];
       audio.play().catch(() => {});
-      audioElemsRef.current.set(peerId, audio);
     };
 
     pc.onicecandidate = (e) => {
@@ -299,6 +309,11 @@ export default function KobeyaRoom({ room, onLeave }: KobeyaRoomProps) {
     }
 
     try {
+      // Resume (or create) AudioContext in user gesture scope — required for iOS Safari autoplay
+      if (audioContextRef.current && audioContextRef.current.state === 'suspended') {
+        await audioContextRef.current.resume();
+      }
+
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
       localStreamRef.current = stream;
       startVolumeMeter(stream);
@@ -338,6 +353,10 @@ export default function KobeyaRoom({ room, onLeave }: KobeyaRoomProps) {
           });
           const pc = createPeerConnection(peerId, peerName);
           await pc.setRemoteDescription(new RTCSessionDescription(payload.sdp));
+          // Flush buffered ICE candidates that arrived before the offer was processed
+          const buffered = iceCandidateBuffersRef.current.get(peerId) ?? [];
+          for (const c of buffered) { await pc.addIceCandidate(new RTCIceCandidate(c)).catch(() => {}); }
+          iceCandidateBuffersRef.current.delete(peerId);
           const answer = await pc.createAnswer();
           await pc.setLocalDescription(answer);
           channel.send({ type: 'broadcast', event: 'voice_answer',
@@ -346,12 +365,24 @@ export default function KobeyaRoom({ room, onLeave }: KobeyaRoomProps) {
         .on('broadcast', { event: 'voice_answer' }, async ({ payload }) => {
           if (payload.to !== myId) return;
           const peer = peersRef.current.get(payload.from);
-          if (peer) await peer.conn.setRemoteDescription(new RTCSessionDescription(payload.sdp));
+          if (!peer) return;
+          await peer.conn.setRemoteDescription(new RTCSessionDescription(payload.sdp));
+          // Flush buffered ICE candidates
+          const buffered = iceCandidateBuffersRef.current.get(payload.from) ?? [];
+          for (const c of buffered) { await peer.conn.addIceCandidate(new RTCIceCandidate(c)).catch(() => {}); }
+          iceCandidateBuffersRef.current.delete(payload.from);
         })
         .on('broadcast', { event: 'ice' }, async ({ payload }) => {
           if (payload.to !== myId) return;
           const peer = peersRef.current.get(payload.from);
-          if (peer) await peer.conn.addIceCandidate(new RTCIceCandidate(payload.candidate));
+          if (peer && peer.conn.remoteDescription) {
+            await peer.conn.addIceCandidate(new RTCIceCandidate(payload.candidate)).catch(() => {});
+          } else {
+            // Remote description not set yet — buffer the candidate
+            const buf = iceCandidateBuffersRef.current.get(payload.from) ?? [];
+            buf.push(payload.candidate);
+            iceCandidateBuffersRef.current.set(payload.from, buf);
+          }
         })
         .on('broadcast', { event: 'voice_leave' }, ({ payload }) => {
           const peerId: string = payload.from;
@@ -395,8 +426,9 @@ export default function KobeyaRoom({ room, onLeave }: KobeyaRoomProps) {
     localStreamRef.current = null;
     Array.from(peersRef.current.values()).forEach(({ conn }) => conn.close());
     peersRef.current.clear();
-    Array.from(audioElemsRef.current.values()).forEach((a) => { a.srcObject = null; });
+    Array.from(audioElemsRef.current.values()).forEach((a) => { a.srcObject = null; a.remove(); });
     audioElemsRef.current.clear();
+    iceCandidateBuffersRef.current.clear();
     setVoiceActive(false);
     setVoiceUsers([]);
     setVoiceToast('');
