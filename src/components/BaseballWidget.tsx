@@ -10,18 +10,18 @@ interface GameScore {
 }
 
 const TEAM_SHORT: Record<string, string> = {
-  'Yomiuri Giants': '巨人',
-  'Hanshin Tigers': '阪神',
-  'Hiroshima Toyo Carp': '広島',
-  'Yokohama DeNA BayStars': 'DeNA',
-  'Tokyo Yakult Swallows': 'ヤクルト',
-  'Chunichi Dragons': '中日',
-  'Fukuoka SoftBank Hawks': 'SB',
-  'Tohoku Rakuten Golden Eagles': '楽天',
-  'Chiba Lotte Marines': 'ロッテ',
-  'Orix Buffaloes': 'Orix',
-  'Hokkaido Nippon-Ham Fighters': '日ハム',
-  'Saitama Seibu Lions': '西武',
+  '読売ジャイアンツ': '巨人',
+  '東京ヤクルトスワローズ': 'ヤクルト',
+  '横浜DeNAベイスターズ': 'DeNA',
+  '中日ドラゴンズ': '中日',
+  '阪神タイガース': '阪神',
+  '広島東洋カープ': '広島',
+  '福岡ソフトバンクホークス': 'SB',
+  '東北楽天ゴールデンイーグルス': '楽天',
+  '千葉ロッテマリーンズ': 'ロッテ',
+  'オリックス・バファローズ': 'Orix',
+  '北海道日本ハムファイターズ': '日ハム',
+  '埼玉西武ライオンズ': '西武',
 };
 
 function short(name: string) {
@@ -56,16 +56,13 @@ export default function BaseballWidget() {
             <span className={`text-[10px] px-1.5 py-0.5 rounded font-medium shrink-0 ${
               g.status === '終了' ? 'bg-gray-100 text-gray-500' :
               g.status.includes('回') ? 'bg-green-100 text-green-700' :
+              g.status === '予定' ? 'bg-blue-50 text-blue-600' :
               'bg-blue-50 text-blue-600'
             }`}>{g.status}</span>
             <span className="text-gray-700 font-medium shrink-0">{short(g.awayTeam)}</span>
-            <span className="font-bold text-gray-900">
-              {g.awayScore !== null ? g.awayScore : '-'}
-            </span>
+            <span className="font-bold text-gray-900">{g.awayScore !== null ? g.awayScore : '-'}</span>
             <span className="text-gray-400 text-[10px]">-</span>
-            <span className="font-bold text-gray-900">
-              {g.homeScore !== null ? g.homeScore : '-'}
-            </span>
+            <span className="font-bold text-gray-900">{g.homeScore !== null ? g.homeScore : '-'}</span>
             <span className="text-gray-700 font-medium shrink-0">{short(g.homeTeam)}</span>
           </div>
         ))}

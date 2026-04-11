@@ -1,7 +1,9 @@
 "use client";
 
-import { useState } from "react";
-import { initialPosts, TOPICS, type Topic } from "@/data/posts";
+import { useState, useEffect, useRef, useCallback } from "react";
+import Link from "next/link";
+import { TOPICS, type Topic } from "@/data/posts";
+import { createClient } from "@/lib/supabase/client";
 
 export interface Room {
   id: number;
@@ -11,49 +13,308 @@ export interface Room {
   members: number;
 }
 
+interface Message {
+  id: number;
+  room_id: number;
+  body: string;
+  name: string;
+  created_at: string;
+}
+
+interface PresenceUser {
+  userId: string;
+  displayName: string;
+  joinedAt: number;
+}
+
 interface KobeyaRoomProps {
   room: Room;
   onLeave: () => void;
 }
 
+interface PeerState {
+  conn: RTCPeerConnection;
+  stream?: MediaStream;
+  displayName: string;
+}
+
+function timeLabel(ts: string) {
+  return new Date(ts).toLocaleTimeString('ja-JP', { hour: '2-digit', minute: '2-digit' });
+}
+
+const MAX_VOICE_USERS = 6;
+
 export default function KobeyaRoom({ room, onLeave }: KobeyaRoomProps) {
   const topicMeta = TOPICS.find((t) => t.id === room.topic) ?? TOPICS[TOPICS.length - 1];
+  const supabase = createClient();
 
-  const seed = initialPosts.filter((p) => p.topic === room.topic);
-  const [messages, setMessages] = useState(
-    seed.map((p) => ({ id: p.id, name: p.name, body: p.body, time: p.time, likes: p.likes, liked: p.liked }))
-  );
+  const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
-  const [nextId, setNextId] = useState(9000);
+  const [loadingMsgs, setLoadingMsgs] = useState(true);
+  const [activeUsers, setActiveUsers] = useState<PresenceUser[]>([]);
+  const bottomRef = useRef<HTMLDivElement>(null);
 
-  const handlePost = () => {
+  // Current user
+  const [currentUser, setCurrentUser] = useState<{ id: string; name: string } | null>(null);
+  const myPresenceId = useRef(Math.random().toString(36).slice(2, 8));
+
+  // Voice chat
+  const [voiceActive, setVoiceActive] = useState(false);
+  const [voiceUsers, setVoiceUsers] = useState<{ id: string; name: string }[]>([]);
+  const [voiceMuted, setVoiceMuted] = useState(false);
+  const [voiceError, setVoiceError] = useState('');
+  const localStreamRef = useRef<MediaStream | null>(null);
+  const peersRef = useRef<Map<string, PeerState>>(new Map());
+  const audioElemsRef = useRef<Map<string, HTMLAudioElement>>(new Map());
+  const voiceChannelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
+
+  // Get current user
+  useEffect(() => {
+    supabase.auth.getUser().then(({ data }) => {
+      const u = data.user;
+      if (u) {
+        const name = u.user_metadata?.full_name ?? u.email?.split('@')[0] ?? 'ゲスト';
+        setCurrentUser({ id: u.id, name });
+      }
+    });
+  }, []);
+
+  // Load messages
+  useEffect(() => {
+    supabase
+      .from('room_messages')
+      .select('*')
+      .eq('room_id', room.id)
+      .order('created_at', { ascending: true })
+      .limit(100)
+      .then(({ data }) => {
+        if (data) setMessages(data as Message[]);
+        setLoadingMsgs(false);
+      });
+  }, [room.id]);
+
+  // Realtime messages
+  useEffect(() => {
+    const channel = supabase
+      .channel(`room_messages:${room.id}`)
+      .on('postgres_changes', {
+        event: 'INSERT', schema: 'public', table: 'room_messages', filter: `room_id=eq.${room.id}`
+      }, (payload) => {
+        setMessages((prev) => {
+          if (prev.some((m) => m.id === (payload.new as Message).id)) return prev;
+          return [...prev, payload.new as Message];
+        });
+      })
+      .subscribe();
+    return () => { supabase.removeChannel(channel); };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [room.id]);
+
+  // Presence — active users
+  useEffect(() => {
+    const displayName = currentUser?.name ?? 'にんげんさん';
+    const presenceChannel = supabase.channel(`presence_room_${room.id}`, {
+      config: { presence: { key: myPresenceId.current } },
+    });
+
+    presenceChannel
+      .on('presence', { event: 'sync' }, () => {
+        const state = presenceChannel.presenceState<PresenceUser>();
+        const users: PresenceUser[] = [];
+        Object.values(state).forEach((entries) => {
+          entries.forEach((e) => users.push(e));
+        });
+        setActiveUsers(users);
+      })
+      .subscribe(async (status) => {
+        if (status === 'SUBSCRIBED') {
+          await presenceChannel.track({
+            userId: myPresenceId.current,
+            displayName,
+            joinedAt: Date.now(),
+          });
+        }
+      });
+
+    return () => { supabase.removeChannel(presenceChannel); };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [room.id, currentUser]);
+
+  // Auto scroll
+  useEffect(() => {
+    bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [messages]);
+
+  const handlePost = async () => {
     const text = input.trim();
     if (!text) return;
-    setMessages((prev) => [
-      ...prev,
-      { id: nextId, name: "にんげんさん", body: text, time: "たった今", likes: 0, liked: false },
-    ]);
-    setNextId((n) => n + 1);
     setInput("");
+    const name = currentUser?.name ?? 'にんげんさん';
+    await supabase.from('room_messages').insert({ room_id: room.id, body: text, name });
   };
 
-  const toggleLike = (id: number) => {
-    setMessages((prev) =>
-      prev.map((m) =>
-        m.id === id ? { ...m, liked: !m.liked, likes: m.liked ? m.likes - 1 : m.likes + 1 } : m
-      )
-    );
+  // ---- Voice Chat (WebRTC) ----
+  const createPeerConnection = useCallback((peerId: string, peerName: string): RTCPeerConnection => {
+    const pc = new RTCPeerConnection({
+      iceServers: [
+        { urls: 'stun:stun.l.google.com:19302' },
+        { urls: 'stun:stun1.l.google.com:19302' },
+      ],
+    });
+
+    if (localStreamRef.current) {
+      localStreamRef.current.getTracks().forEach((t) => pc.addTrack(t, localStreamRef.current!));
+    }
+
+    pc.ontrack = (e) => {
+      const audio = audioElemsRef.current.get(peerId) ?? new Audio();
+      audio.srcObject = e.streams[0];
+      audio.play().catch(() => {});
+      audioElemsRef.current.set(peerId, audio);
+    };
+
+    pc.onicecandidate = (e) => {
+      if (e.candidate && voiceChannelRef.current) {
+        voiceChannelRef.current.send({
+          type: 'broadcast', event: 'ice',
+          payload: { to: peerId, from: myPresenceId.current, candidate: e.candidate },
+        });
+      }
+    };
+
+    pc.onconnectionstatechange = () => {
+      if (pc.connectionState === 'disconnected' || pc.connectionState === 'failed') {
+        peersRef.current.delete(peerId);
+        setVoiceUsers((prev) => prev.filter((u) => u.id !== peerId));
+      }
+    };
+
+    peersRef.current.set(peerId, { conn: pc, displayName: peerName });
+    return pc;
+  }, []);
+
+  const joinVoice = async () => {
+    setVoiceError('');
+
+    if (!currentUser) {
+      setVoiceError('ボイスチャットにはログインが必要です');
+      return;
+    }
+
+    // Check current voice user count
+    if (voiceUsers.length >= MAX_VOICE_USERS) {
+      setVoiceError(`ボイスチャットは最大${MAX_VOICE_USERS}人までです`);
+      return;
+    }
+
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+      localStreamRef.current = stream;
+
+      const channel = supabase.channel(`voice_${room.id}`, {
+        config: { broadcast: { self: false } },
+      });
+      voiceChannelRef.current = channel;
+
+      const myId = myPresenceId.current;
+      const myName = currentUser.name;
+
+      channel
+        .on('broadcast', { event: 'voice_join' }, async ({ payload }) => {
+          if (payload.from === myId) return;
+          const peerId: string = payload.from;
+          const peerName: string = payload.name ?? 'ゲスト';
+          setVoiceUsers((prev) => {
+            if (prev.some((u) => u.id === peerId)) return prev;
+            if (prev.length >= MAX_VOICE_USERS) return prev;
+            return [...prev, { id: peerId, name: peerName }];
+          });
+          const pc = createPeerConnection(peerId, peerName);
+          const offer = await pc.createOffer();
+          await pc.setLocalDescription(offer);
+          channel.send({ type: 'broadcast', event: 'voice_offer',
+            payload: { to: peerId, from: myId, fromName: myName, sdp: offer } });
+        })
+        .on('broadcast', { event: 'voice_offer' }, async ({ payload }) => {
+          if (payload.to !== myId) return;
+          const peerId: string = payload.from;
+          const peerName: string = payload.fromName ?? 'ゲスト';
+          setVoiceUsers((prev) => {
+            if (prev.some((u) => u.id === peerId)) return prev;
+            if (prev.length >= MAX_VOICE_USERS) return prev;
+            return [...prev, { id: peerId, name: peerName }];
+          });
+          const pc = createPeerConnection(peerId, peerName);
+          await pc.setRemoteDescription(new RTCSessionDescription(payload.sdp));
+          const answer = await pc.createAnswer();
+          await pc.setLocalDescription(answer);
+          channel.send({ type: 'broadcast', event: 'voice_answer',
+            payload: { to: peerId, from: myId, sdp: answer } });
+        })
+        .on('broadcast', { event: 'voice_answer' }, async ({ payload }) => {
+          if (payload.to !== myId) return;
+          const peer = peersRef.current.get(payload.from);
+          if (peer) await peer.conn.setRemoteDescription(new RTCSessionDescription(payload.sdp));
+        })
+        .on('broadcast', { event: 'ice' }, async ({ payload }) => {
+          if (payload.to !== myId) return;
+          const peer = peersRef.current.get(payload.from);
+          if (peer) await peer.conn.addIceCandidate(new RTCIceCandidate(payload.candidate));
+        })
+        .on('broadcast', { event: 'voice_leave' }, ({ payload }) => {
+          const peerId: string = payload.from;
+          peersRef.current.get(peerId)?.conn.close();
+          peersRef.current.delete(peerId);
+          audioElemsRef.current.delete(peerId);
+          setVoiceUsers((prev) => prev.filter((u) => u.id !== peerId));
+        })
+        .subscribe(() => {
+          setVoiceUsers([{ id: myId, name: myName }]);
+          channel.send({ type: 'broadcast', event: 'voice_join',
+            payload: { from: myId, name: myName } });
+        });
+
+      setVoiceActive(true);
+    } catch {
+      setVoiceError('マイクへのアクセスが拒否されました。ブラウザの設定を確認してください。');
+    }
+  };
+
+  const leaveVoice = useCallback(() => {
+    if (voiceChannelRef.current) {
+      voiceChannelRef.current.send({
+        type: 'broadcast', event: 'voice_leave',
+        payload: { from: myPresenceId.current },
+      });
+      supabase.removeChannel(voiceChannelRef.current);
+      voiceChannelRef.current = null;
+    }
+    localStreamRef.current?.getTracks().forEach((t) => t.stop());
+    localStreamRef.current = null;
+    Array.from(peersRef.current.values()).forEach(({ conn }) => conn.close());
+    peersRef.current.clear();
+    Array.from(audioElemsRef.current.values()).forEach((a) => { a.srcObject = null; });
+    audioElemsRef.current.clear();
+    setVoiceActive(false);
+    setVoiceUsers([]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const leaveVoiceRef = useRef(leaveVoice);
+  leaveVoiceRef.current = leaveVoice;
+  useEffect(() => () => { leaveVoiceRef.current(); }, []);
+
+  const toggleMute = () => {
+    localStreamRef.current?.getAudioTracks().forEach((t) => { t.enabled = voiceMuted; });
+    setVoiceMuted(!voiceMuted);
   };
 
   return (
     <div className="max-w-2xl mx-auto flex flex-col" style={{ minHeight: "calc(100vh - 120px)" }}>
       {/* Room header */}
-      <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-4 mb-4">
+      <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-4 mb-3">
         <div className="flex items-start gap-3">
-          <button
-            onClick={onLeave}
-            className="shrink-0 mt-0.5 flex items-center gap-1 text-[12px] text-gray-400 hover:text-gray-700 transition-colors"
-          >
+          <button onClick={onLeave} className="shrink-0 mt-0.5 flex items-center gap-1 text-[12px] text-gray-400 hover:text-gray-700 transition-colors">
             <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
             </svg>
@@ -69,38 +330,103 @@ export default function KobeyaRoom({ room, onLeave }: KobeyaRoomProps) {
             <p className="text-[12px] text-gray-500 mt-1">{room.desc}</p>
           </div>
           <div className="shrink-0 text-right">
-            <span className="text-[11px] text-gray-400 block">{room.members.toLocaleString()} 人</span>
-            <span className="text-[10px] text-green-500">● 話し中</span>
+            <div className="text-[11px] text-gray-500 flex items-center gap-1 justify-end">
+              <span className={activeUsers.length > 0 ? 'text-green-500' : 'text-gray-300'}>●</span>
+              {activeUsers.length}人いる
+            </div>
           </div>
+        </div>
+
+        {/* Active users list */}
+        {activeUsers.length > 0 && (
+          <div className="mt-2 flex flex-wrap gap-1.5">
+            {activeUsers.map((u) => (
+              <span key={u.userId} className="text-[10px] px-2 py-0.5 bg-gray-100 text-gray-600 rounded-full">
+                {u.displayName}
+              </span>
+            ))}
+          </div>
+        )}
+
+        {/* Voice chat */}
+        <div className="mt-3 pt-3 border-t border-gray-100">
+          {voiceError && (
+            <div className="mb-2 text-[11px] text-red-500 flex items-center gap-1">
+              <span>⚠️</span> {voiceError}
+              {!currentUser && (
+                <Link href="/auth/login" className="underline text-teal-600 ml-1">ログイン</Link>
+              )}
+            </div>
+          )}
+          {!voiceActive ? (
+            <div className="flex items-center gap-2">
+              <button
+                onClick={joinVoice}
+                className="flex items-center gap-1.5 px-3 py-1.5 bg-violet-600 hover:bg-violet-700 text-white text-[12px] font-semibold rounded-lg transition-colors"
+              >
+                🎤 ボイス参加
+              </button>
+              {!currentUser && (
+                <span className="text-[11px] text-gray-400">※ ログインが必要です</span>
+              )}
+            </div>
+          ) : (
+            <div className="space-y-2">
+              <div className="flex items-center gap-2 flex-wrap">
+                <div className="flex items-center gap-1.5 px-3 py-1.5 bg-violet-100 text-violet-700 text-[12px] font-semibold rounded-lg">
+                  <span className="animate-pulse">🔴</span> ライブ中
+                </div>
+                <button
+                  onClick={toggleMute}
+                  className={`flex items-center gap-1 px-2.5 py-1.5 text-[12px] font-medium rounded-lg border transition-colors ${
+                    voiceMuted ? 'bg-red-50 text-red-600 border-red-200' : 'bg-gray-50 text-gray-600 border-gray-200 hover:bg-gray-100'
+                  }`}
+                >
+                  {voiceMuted ? '🔇 ミュート' : '🔊 発話中'}
+                </button>
+                <button
+                  onClick={leaveVoice}
+                  className="px-2.5 py-1.5 bg-gray-100 hover:bg-gray-200 text-gray-600 text-[12px] font-medium rounded-lg transition-colors"
+                >
+                  退出
+                </button>
+              </div>
+              {/* Voice participants */}
+              <div className="flex flex-wrap gap-1.5">
+                {voiceUsers.map((u) => (
+                  <div key={u.id} className="flex items-center gap-1 text-[11px] px-2 py-1 bg-violet-50 text-violet-700 rounded-full border border-violet-200">
+                    <span className="text-[9px]">{u.id === myPresenceId.current ? (voiceMuted ? '🔇' : '🎤') : '🔊'}</span>
+                    {u.name}
+                    {u.id === myPresenceId.current && <span className="text-[9px] text-violet-400">(自分)</span>}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
       </div>
 
       {/* Messages */}
-      <div className="flex-1 space-y-2 mb-4">
-        {messages.length === 0 && (
+      <div className="flex-1 space-y-2 mb-4 overflow-y-auto" style={{ maxHeight: 'calc(100vh - 420px)' }}>
+        {loadingMsgs && <div className="text-center py-8 text-gray-400 text-sm">読み込み中...</div>}
+        {!loadingMsgs && messages.length === 0 && (
           <div className="text-center py-16 text-gray-400 text-sm">
             まだ誰も話していません。最初に話しかけてみませんか？
           </div>
         )}
         {messages.map((msg) => {
-          const isMe = msg.name === "にんげんさん" && msg.time === "たった今";
+          const isMe = msg.name === (currentUser?.name ?? 'にんげんさん');
           return (
-            <div
-              key={msg.id}
-              className={`flex gap-2.5 ${isMe ? "flex-row-reverse" : ""}`}
-            >
-              {/* Avatar */}
+            <div key={msg.id} className={`flex gap-2.5 ${isMe ? "flex-row-reverse" : ""}`}>
               <div className={`shrink-0 w-7 h-7 rounded-full flex items-center justify-center text-[11px] font-bold ${
                 isMe ? "bg-teal-100 text-teal-600" : "bg-gray-100 text-gray-500"
               }`}>
                 {msg.name[0]}
               </div>
-
-              {/* Bubble */}
               <div className={`max-w-[78%] ${isMe ? "items-end" : "items-start"} flex flex-col gap-1`}>
-                {!isMe && (
-                  <span className="text-[11px] text-gray-400 px-1">{msg.name} · {msg.time}</span>
-                )}
+                <span className="text-[11px] text-gray-400 px-1">
+                  {isMe ? `${timeLabel(msg.created_at)}` : `${msg.name} · ${timeLabel(msg.created_at)}`}
+                </span>
                 <div className={`px-3.5 py-2.5 rounded-2xl text-[13px] leading-relaxed ${
                   isMe
                     ? "bg-teal-600 text-white rounded-tr-sm"
@@ -108,20 +434,11 @@ export default function KobeyaRoom({ room, onLeave }: KobeyaRoomProps) {
                 }`}>
                   {msg.body}
                 </div>
-                {/* Like */}
-                <button
-                  onClick={() => toggleLike(msg.id)}
-                  className={`flex items-center gap-1 text-[11px] px-1.5 transition-colors ${
-                    msg.liked ? "text-rose-500" : "text-gray-300 hover:text-rose-400"
-                  }`}
-                >
-                  <span>{msg.liked ? "♥" : "♡"}</span>
-                  {msg.likes > 0 && <span>{msg.likes}</span>}
-                </button>
               </div>
             </div>
           );
         })}
+        <div ref={bottomRef} />
       </div>
 
       {/* Input */}
@@ -133,9 +450,7 @@ export default function KobeyaRoom({ room, onLeave }: KobeyaRoomProps) {
             placeholder={`${room.name}に話しかける...`}
             className="flex-1 bg-transparent text-gray-700 placeholder-gray-300 resize-none outline-none text-[13px] leading-relaxed"
             rows={2}
-            onKeyDown={(e) => {
-              if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) handlePost();
-            }}
+            onKeyDown={(e) => { if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) handlePost(); }}
           />
           <button
             onClick={handlePost}

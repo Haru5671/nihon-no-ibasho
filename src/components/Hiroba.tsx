@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import Link from "next/link";
 import { TOPICS, type Topic } from "@/data/posts";
 import ShareButtons from "@/components/ShareButtons";
+import SaveButton from "@/components/SaveButton";
 import AdSenseUnit from "@/components/AdSenseUnit";
 import TopicIcon from "@/components/TopicIcon";
 import { timeAgo } from "@/lib/utils";
@@ -19,7 +20,7 @@ interface Post {
   liked?: boolean;
 }
 
-export default function Hiroba({ defaultTopic }: { defaultTopic?: Topic }) {
+export default function Hiroba({ defaultTopic, searchQuery = "" }: { defaultTopic?: Topic; searchQuery?: string }) {
   const [posts, setPosts] = useState<Post[]>([]);
   const [input, setInput] = useState("");
   const [selectedTopic, setSelectedTopic] = useState<Topic | "すべて">(defaultTopic ?? "すべて");
@@ -28,6 +29,9 @@ export default function Hiroba({ defaultTopic }: { defaultTopic?: Topic }) {
   const [loading, setLoading] = useState(true);
   const [postError, setPostError] = useState<string | null>(null);
   const [focused, setFocused] = useState(false);
+  const [replyOpenId, setReplyOpenId] = useState<string | null>(null);
+  const [replyInputs, setReplyInputs] = useState<Record<string, string>>({});
+  const [replySubmitting, setReplySubmitting] = useState<string | null>(null);
 
   useEffect(() => {
     if (defaultTopic) setSelectedTopic(defaultTopic);
@@ -84,14 +88,40 @@ export default function Hiroba({ defaultTopic }: { defaultTopic?: Topic }) {
     ));
   };
 
-  const filtered = selectedTopic === "すべて" ? posts : posts.filter((p) => p.topic === selectedTopic);
+  const submitReply = async (postId: string) => {
+    const text = (replyInputs[postId] ?? '').trim();
+    if (!text) return;
+    setReplySubmitting(postId);
+    const res = await fetch(`/api/posts/${postId}/replies`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ body: text }),
+    });
+    if (res.ok) {
+      setPosts(posts.map((p) =>
+        p.id === postId
+          ? { ...p, replies: [{ count: (p.replies?.[0]?.count ?? 0) + 1 }] }
+          : p
+      ));
+      setReplyInputs((prev) => ({ ...prev, [postId]: '' }));
+      setReplyOpenId(null);
+    }
+    setReplySubmitting(null);
+  };
+
+  const topicFiltered = selectedTopic === "すべて" ? posts : posts.filter((p) => p.topic === selectedTopic);
+
+  const filtered = searchQuery.trim()
+    ? topicFiltered.filter((p) => p.body.toLowerCase().includes(searchQuery.toLowerCase()))
+    : topicFiltered;
+
   const getTopicMeta = (topic: Topic) => TOPICS.find((t) => t.id === topic) ?? TOPICS[TOPICS.length - 1];
 
   return (
     <div>
 
-      {/* Post form — always visible hero */}
-      <div className={`bg-white border-2 rounded-lg mb-4 p-4 shadow-sm transition-all ${focused || focused ? 'border-teal-400 shadow-md' : 'border-gray-200 hover:border-teal-300'}`}>
+      {/* Post form */}
+      <div className={`bg-white border-2 rounded-lg mb-4 p-4 shadow-sm transition-all ${focused ? 'border-teal-400 shadow-md' : 'border-gray-200 hover:border-teal-300'}`}>
         <div className="flex items-center gap-2 mb-3">
           <svg className="w-4 h-4 text-teal-500 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
@@ -100,16 +130,13 @@ export default function Hiroba({ defaultTopic }: { defaultTopic?: Topic }) {
           <span className="text-[11px] text-gray-400 ml-auto">匿名・登録不要</span>
         </div>
 
-        {/* Topic selector */}
         <div className="flex gap-1.5 flex-wrap mb-3">
           {TOPICS.map((t) => (
             <button
               key={t.id}
               onClick={() => { setPostTopic(t.id); setFocused(true); }}
               className={`px-2 py-0.5 rounded text-[11px] font-semibold border transition-colors flex items-center gap-1 ${
-                postTopic === t.id
-                  ? `${t.color} font-bold`
-                  : "bg-white text-gray-400 border-gray-200 hover:border-gray-300"
+                postTopic === t.id ? `${t.color} font-bold` : "bg-white text-gray-400 border-gray-200 hover:border-gray-300"
               }`}
             >
               <TopicIcon topic={t.id} size={11} />
@@ -124,7 +151,7 @@ export default function Hiroba({ defaultTopic }: { defaultTopic?: Topic }) {
           onFocus={() => setFocused(true)}
           placeholder="AIに仕事を奪われた、失業手当がわからない、クビになった、誰にも話せない気持ち…なんでも書いてみてください。"
           className="w-full bg-gray-50 text-gray-700 placeholder-gray-400 resize-none outline-none text-[13px] leading-relaxed rounded p-2.5 border border-gray-200 focus:border-teal-300 focus:bg-white transition-colors"
-          rows={focused || focused ? 4 : 2}
+          rows={focused ? 4 : 2}
           onKeyDown={(e) => { if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) handlePost(); }}
         />
         {postError && (
@@ -142,11 +169,19 @@ export default function Hiroba({ defaultTopic }: { defaultTopic?: Topic }) {
         </div>
       </div>
 
+      {/* Search result banner */}
+      {searchQuery && (
+        <div className="mb-2 px-3 py-2 bg-teal-50 border border-teal-200 rounded text-[12px] text-teal-700 flex items-center justify-between">
+          <span>「{searchQuery}」の検索結果 — {filtered.length}件</span>
+          <span className="text-teal-500 text-[10px]">絞り込み中</span>
+        </div>
+      )}
+
       {/* Topic filter tabs */}
-      <div className="flex gap-0 overflow-x-auto mb-2 bg-white border border-gray-200 rounded" style={{ scrollbarWidth: 'none' }}>
+      <div className="flex overflow-x-auto mb-2 bg-white border border-gray-200 rounded" style={{ scrollbarWidth: 'none', flexWrap: 'nowrap' }}>
         <button
           onClick={() => setSelectedTopic("すべて")}
-          className={`shrink-0 px-3 py-2 text-[12px] font-semibold border-r border-gray-100 transition-colors ${
+          className={`shrink-0 px-3 py-2 h-9 flex items-center text-[12px] font-semibold border-r border-gray-100 transition-colors whitespace-nowrap ${
             selectedTopic === "すべて" ? "bg-teal-600 text-white" : "text-gray-500 hover:bg-gray-50"
           }`}
         >
@@ -156,27 +191,30 @@ export default function Hiroba({ defaultTopic }: { defaultTopic?: Topic }) {
           <button
             key={t.id}
             onClick={() => setSelectedTopic(t.id)}
-            className={`shrink-0 px-3 py-2 text-[12px] font-semibold border-r border-gray-100 transition-colors whitespace-nowrap ${
+            className={`shrink-0 px-3 py-2 h-9 flex items-center gap-1 text-[12px] font-semibold border-r border-gray-100 transition-colors whitespace-nowrap ${
               selectedTopic === t.id ? "bg-teal-600 text-white" : "text-gray-500 hover:bg-gray-50"
             }`}
           >
-            <TopicIcon topic={t.id} size={12} className="shrink-0" />
+            <TopicIcon topic={t.id} size={12} />
             {t.id}
           </button>
         ))}
       </div>
 
-      {/* News-style post list */}
+      {/* Post list */}
       <div className="bg-white border border-gray-200 rounded overflow-hidden">
         {loading && (
           <div className="text-center py-10 text-gray-400 text-[13px]">読み込み中...</div>
         )}
         {!loading && filtered.length === 0 && (
-          <div className="text-center py-10 text-gray-400 text-[13px]">まだ投稿がありません</div>
+          <div className="text-center py-10 text-gray-400 text-[13px]">
+            {searchQuery ? '該当する投稿が見つかりませんでした' : 'まだ投稿がありません'}
+          </div>
         )}
         {filtered.map((post, index) => {
           const m = getTopicMeta(post.topic);
           const replyCount = post.replies?.[0]?.count ?? 0;
+          const isReplyOpen = replyOpenId === post.id;
           return (
             <div key={post.id}>
               {index > 0 && index % 8 === 0 && (
@@ -186,7 +224,6 @@ export default function Hiroba({ defaultTopic }: { defaultTopic?: Topic }) {
               )}
               <div className={`border-b border-gray-100 last:border-b-0 transition-colors ${newPostIds.has(post.id) ? 'bg-teal-50' : 'hover:bg-gray-50'}`}>
                 <Link href={`/posts/${post.id}`} className="block px-4 py-3">
-                  {/* Meta row */}
                   <div className="flex items-center gap-2 mb-1.5">
                     <span className={`text-[10px] px-1.5 py-0.5 rounded font-semibold border flex items-center gap-1 ${m.color}`}>
                       <TopicIcon topic={post.topic} size={10} />
@@ -197,36 +234,80 @@ export default function Hiroba({ defaultTopic }: { defaultTopic?: Topic }) {
                     )}
                     <span className="text-[11px] text-gray-400 ml-auto">{timeAgo(post.created_at)}</span>
                   </div>
-                  {/* Body */}
                   <p className="text-[13px] text-gray-800 leading-relaxed line-clamp-2">{post.body}</p>
                 </Link>
+
                 {/* Action row */}
-                <div className="flex items-center gap-1 px-4 pb-2">
+                <div className="flex items-center gap-2 px-4 pb-2">
+                  {/* Like button — prominent */}
                   <button
                     onClick={(e) => toggleLike(post.id, e)}
-                    className={`flex items-center gap-1 text-[11px] px-2 py-0.5 rounded transition-colors ${
-                      post.liked ? "text-rose-500 bg-rose-50" : "text-gray-400 hover:text-rose-400 hover:bg-rose-50"
+                    className={`flex items-center gap-1.5 text-[12px] px-3 py-1 rounded-full font-semibold border transition-all ${
+                      post.liked
+                        ? "text-rose-500 bg-rose-50 border-rose-200 scale-105"
+                        : "text-gray-400 bg-gray-50 border-gray-200 hover:text-rose-500 hover:bg-rose-50 hover:border-rose-200"
                     }`}
                   >
-                    <span>{post.liked ? "♥" : "♡"}</span>
+                    <span className="text-[14px] leading-none">{post.liked ? "♥" : "♡"}</span>
                     <span>{post.likes}</span>
                   </button>
-                  {replyCount > 0 && (
-                    <Link
-                      href={`/posts/${post.id}`}
-                      className="flex items-center gap-1 text-[11px] text-gray-400 hover:text-teal-600 px-2 py-0.5 rounded hover:bg-teal-50 transition-colors"
-                      onClick={(e) => e.stopPropagation()}
-                    >
-                      <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
-                      </svg>
-                      {replyCount}
-                    </Link>
-                  )}
-                  <div className="ml-auto">
+
+                  {/* Reply button */}
+                  <button
+                    onClick={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      setReplyOpenId(isReplyOpen ? null : post.id);
+                    }}
+                    className={`flex items-center gap-1.5 text-[12px] px-3 py-1 rounded-full font-semibold border transition-all ${
+                      isReplyOpen
+                        ? "text-teal-600 bg-teal-50 border-teal-200"
+                        : "text-gray-400 bg-gray-50 border-gray-200 hover:text-teal-600 hover:bg-teal-50 hover:border-teal-200"
+                    }`}
+                  >
+                    <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+                    </svg>
+                    {replyCount > 0 ? replyCount : '返信'}
+                  </button>
+
+                  <div className="ml-auto flex items-center gap-1">
+                    <SaveButton postId={post.id} />
                     <ShareButtons postId={Number(post.id)} body={post.body} />
                   </div>
                 </div>
+
+                {/* Inline reply form */}
+                {isReplyOpen && (
+                  <div className="px-4 pb-3 border-t border-gray-100 pt-3 bg-gray-50" onClick={(e) => e.stopPropagation()}>
+                    <div className="flex gap-2 items-end">
+                      <textarea
+                        value={replyInputs[post.id] ?? ''}
+                        onChange={(e) => setReplyInputs((prev) => ({ ...prev, [post.id]: e.target.value }))}
+                        placeholder="返信を書く..."
+                        className="flex-1 bg-white text-gray-700 placeholder-gray-400 resize-none outline-none text-[13px] leading-relaxed rounded p-2 border border-gray-200 focus:border-teal-300 transition-colors"
+                        rows={2}
+                        autoFocus
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) submitReply(post.id);
+                        }}
+                      />
+                      <button
+                        onClick={() => submitReply(post.id)}
+                        disabled={!replyInputs[post.id]?.trim() || replySubmitting === post.id}
+                        className="px-3 py-2 bg-teal-600 hover:bg-teal-700 text-white text-[12px] font-bold rounded-lg transition-colors disabled:opacity-30 shrink-0"
+                      >
+                        {replySubmitting === post.id ? '送信中' : '送信'}
+                      </button>
+                    </div>
+                    <div className="flex items-center justify-between mt-1.5">
+                      <span className="text-[10px] text-gray-400">Cmd+Enter で送信</span>
+                      <Link href={`/posts/${post.id}`} className="text-[10px] text-teal-500 hover:underline">
+                        全返信を見る →
+                      </Link>
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
           );

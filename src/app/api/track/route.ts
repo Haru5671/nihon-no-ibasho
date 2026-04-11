@@ -4,7 +4,7 @@ import { createHash } from 'crypto';
 
 export async function POST(req: Request) {
   try {
-    const { path } = await req.json();
+    const { path, referrer, ua } = await req.json();
 
     const ip =
       req.headers.get('x-forwarded-for')?.split(',')[0].trim() ??
@@ -17,7 +17,12 @@ export async function POST(req: Request) {
       process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
     );
 
-    await db.from('page_views').insert({ path: path ?? '/', ip_hash: ipHash });
+    await db.from('page_views').insert({
+      path: path ?? '/',
+      ip_hash: ipHash,
+      referrer: referrer ?? null,
+      ua: ua ?? null,
+    });
 
     return NextResponse.json({ ok: true });
   } catch {

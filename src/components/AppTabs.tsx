@@ -23,9 +23,10 @@ type TabId = (typeof tabs)[number]["id"];
 interface AppTabsProps {
   initialTopic?: Topic;
   onTopicSelect?: (topic: Topic) => void;
+  searchQuery?: string;
 }
 
-export default function AppTabs({ initialTopic, onTopicSelect }: AppTabsProps) {
+export default function AppTabs({ initialTopic, onTopicSelect, searchQuery = "" }: AppTabsProps) {
   const [active, setActive] = useState<TabId>("hiroba");
   const [hirohaTopic, setHirohaTopic] = useState<Topic | undefined>(initialTopic);
   const [activeRoom, setActiveRoom] = useState<Room | null>(null);
@@ -81,7 +82,7 @@ export default function AppTabs({ initialTopic, onTopicSelect }: AppTabsProps) {
             <div className="shrink-0 w-[200px]"><WeatherWidget /></div>
             <div className="shrink-0 w-[220px]"><BaseballWidget /></div>
           </div>
-          {active === "hiroba" && <Hiroba defaultTopic={hirohaTopic} />}
+          {active === "hiroba" && <Hiroba defaultTopic={hirohaTopic} searchQuery={searchQuery} />}
           {active === "kobeya" && !activeRoom && <Kobeya onEnterRoom={handleEnterRoom} />}
           {active === "kobeya" && activeRoom && (
             <KobeyaRoom room={activeRoom} onLeave={handleLeaveRoom} />

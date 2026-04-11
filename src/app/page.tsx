@@ -9,6 +9,7 @@ import type { Topic } from "@/data/posts";
 
 export default function Home() {
   const [selectedTopic, setSelectedTopic] = useState<Topic | undefined>(undefined);
+  const [searchQuery, setSearchQuery] = useState("");
 
   const handleTopicSelect = (topic: Topic) => {
     setSelectedTopic(topic);
@@ -19,10 +20,10 @@ export default function Home() {
 
   return (
     <>
-      <Header />
+      <Header searchQuery={searchQuery} onSearch={setSearchQuery} />
       <main>
         <Hero onTopicSelect={handleTopicSelect} />
-        <AppTabs initialTopic={selectedTopic} />
+        <AppTabs initialTopic={selectedTopic} searchQuery={searchQuery} />
       </main>
       <Footer />
     </>

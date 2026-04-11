@@ -25,7 +25,40 @@ async function getStats() {
 
   const posts = postsResult.data ?? [];
   const replies = repliesResult.data ?? [];
-  const pvRows = pvResult.data ?? [];
+  const pvRows = (pvResult.data ?? []) as { id: string; path: string; ip_hash: string; referrer: string | null; ua: string | null; created_at: string }[];
+
+  // Referrer breakdown
+  const referrerCounts: Record<string, number> = {};
+  for (const r of pvRows) {
+    const ref = r.referrer;
+    let label = '直接アクセス';
+    if (ref) {
+      try {
+        const host = new URL(ref).hostname.replace('www.', '');
+        if (host.includes('google')) label = 'Google';
+        else if (host.includes('yahoo')) label = 'Yahoo';
+        else if (host.includes('bing')) label = 'Bing';
+        else if (host.includes('twitter') || host.includes('x.com')) label = 'X (Twitter)';
+        else if (host.includes('instagram')) label = 'Instagram';
+        else if (host.includes('tiktok')) label = 'TikTok';
+        else if (host.includes('line')) label = 'LINE';
+        else if (host.includes('facebook')) label = 'Facebook';
+        else label = host;
+      } catch { label = '直接アクセス'; }
+    }
+    referrerCounts[label] = (referrerCounts[label] ?? 0) + 1;
+  }
+  const topReferrers = Object.entries(referrerCounts).sort((a, b) => b[1] - a[1]).slice(0, 8);
+
+  // Device breakdown
+  const deviceCounts = { スマホ: 0, PC: 0, タブレット: 0, 不明: 0 };
+  for (const r of pvRows) {
+    const ua = r.ua ?? '';
+    if (/iPad|Tablet/i.test(ua)) deviceCounts['タブレット']++;
+    else if (/iPhone|Android|Mobile/i.test(ua)) deviceCounts['スマホ']++;
+    else if (ua) deviceCounts['PC']++;
+    else deviceCounts['不明']++;
+  }
 
   const humanPosts = posts.filter((p) => p.name !== AI_NAME);
   const aiPosts = posts.filter((p) => p.name === AI_NAME);
@@ -116,6 +149,8 @@ async function getStats() {
     maxPosts,
     topicCounts,
     recentPosts,
+    topReferrers,
+    deviceCounts,
   };
 }
 
@@ -251,6 +286,58 @@ export default async function AdminPage() {
                     </div>
                   );
                 })}
+            </div>
+          </div>
+        </div>
+
+        {/* Referrer + Device */}
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', marginBottom: '20px' }}>
+
+          {/* Referrer */}
+          <div style={{ background: '#161b22', border: '1px solid #21262d', borderRadius: '6px', padding: '20px' }}>
+            <div style={{ fontSize: '11px', color: '#484f58', letterSpacing: '0.1em', marginBottom: '16px' }}>TRAFFIC SOURCE</div>
+            {s.topReferrers.length === 0 ? (
+              <div style={{ color: '#484f58', fontSize: '12px' }}>データ収集中...</div>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                {s.topReferrers.map(([label, count]) => {
+                  const pct = s.totalPV > 0 ? (count / s.totalPV) * 100 : 0;
+                  return (
+                    <div key={label}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
+                        <span style={{ fontSize: '11px', color: '#8b949e' }}>{label}</span>
+                        <span style={{ fontSize: '11px', color: '#00d4ff' }}>{count} <span style={{ color: '#484f58' }}>({pct.toFixed(1)}%)</span></span>
+                      </div>
+                      <div style={{ height: '3px', background: '#21262d', borderRadius: '99px', overflow: 'hidden' }}>
+                        <div style={{ height: '100%', width: `${pct}%`, background: 'linear-gradient(90deg, #00d4ff, #39d353)', borderRadius: '99px' }} />
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+
+          {/* Device */}
+          <div style={{ background: '#161b22', border: '1px solid #21262d', borderRadius: '6px', padding: '20px' }}>
+            <div style={{ fontSize: '11px', color: '#484f58', letterSpacing: '0.1em', marginBottom: '16px' }}>DEVICE</div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+              {Object.entries(s.deviceCounts).filter(([, v]) => v > 0).sort((a, b) => b[1] - a[1]).map(([label, count]) => {
+                const pct = s.totalPV > 0 ? (count / s.totalPV) * 100 : 0;
+                const color = label === 'スマホ' ? '#a78bfa' : label === 'PC' ? '#39d353' : label === 'タブレット' ? '#fb923c' : '#484f58';
+                return (
+                  <div key={label}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
+                      <span style={{ fontSize: '11px', color: '#8b949e' }}>{label}</span>
+                      <span style={{ fontSize: '11px', color }}>{count} <span style={{ color: '#484f58' }}>({pct.toFixed(1)}%)</span></span>
+                    </div>
+                    <div style={{ height: '3px', background: '#21262d', borderRadius: '99px', overflow: 'hidden' }}>
+                      <div style={{ height: '100%', width: `${pct}%`, background: color, borderRadius: '99px' }} />
+                    </div>
+                  </div>
+                );
+              })}
+              {s.totalPV === 0 && <div style={{ color: '#484f58', fontSize: '12px' }}>データ収集中...</div>}
             </div>
           </div>
         </div>
