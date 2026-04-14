@@ -73,7 +73,18 @@ export async function GET(req: Request) {
     process.env.SUPABASE_SERVICE_ROLE_KEY ?? process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
   );
 
-  const post = pick(POSTS);
+  // Fetch all bodies already posted to avoid duplicates
+  const { data: existing } = await db
+    .from('posts')
+    .select('body');
+  const postedBodies = new Set((existing ?? []).map((r: { body: string }) => r.body));
+
+  const candidates = POSTS.filter(p => !postedBodies.has(p.body));
+  if (candidates.length === 0) {
+    return NextResponse.json({ ok: false, message: 'All posts already used' });
+  }
+
+  const post = pick(candidates);
 
   const { error } = await db
     .from('posts')
