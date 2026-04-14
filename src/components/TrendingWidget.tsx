@@ -1,5 +1,7 @@
 'use client';
 
+interface Props { compact?: boolean; }
+
 const KEYWORDS = [
   'AI失業',
   '失業手当 申請方法',
@@ -13,14 +15,34 @@ const KEYWORDS = [
   '転職 40代',
 ];
 
-export default function TrendingWidget() {
+export default function TrendingWidget({ compact }: Props) {
+  if (compact) {
+    return (
+      <div className="flex items-center gap-2 px-3 py-2 overflow-hidden">
+        <span className="shrink-0 text-[10px] font-bold text-on-surface-variant whitespace-nowrap flex items-center gap-1">
+          🔥 話題
+        </span>
+        <div className="flex gap-1.5 overflow-x-auto scrollbar-none">
+          {KEYWORDS.map((kw, i) => (
+            <a
+              key={i}
+              href={`https://www.google.co.jp/search?q=${encodeURIComponent(kw)}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="shrink-0 inline-flex items-center gap-0.5 text-[10px] text-primary bg-primary/8 px-2 py-0.5 rounded-full whitespace-nowrap transition-colors hover:bg-primary/15"
+            >
+              <span className="opacity-60">#</span>{kw}
+            </a>
+          ))}
+        </div>
+      </div>
+    );
+  }
+
   return (
-    <div className="bg-white border border-gray-200 rounded overflow-hidden">
-      <div className="px-3 py-2 bg-gray-50 border-b border-gray-200 flex items-center gap-2">
-        <svg className="w-3 h-3 text-orange-500" viewBox="0 0 20 20" fill="currentColor">
-          <path fillRule="evenodd" d="M12.395 2.553a1 1 0 00-1.45-.385c-.345.23-.614.558-.822.88-.214.33-.403.713-.57 1.116-.334.804-.614 1.768-.84 2.734a31.365 31.365 0 00-.613 3.58 2.64 2.64 0 01-.945-1.067c-.328-.68-.398-1.534-.398-2.654A1 1 0 005.05 6.05 6.981 6.981 0 003 11a7 7 0 1011.95-4.95c-.592-.591-.98-.985-1.348-1.467-.363-.476-.724-1.063-1.207-2.03zM12.12 15.12A3 3 0 017 13s.879.5 2.5.5c0-1 .5-4 1.25-4.5.5 1 .786 1.293 1.371 1.879A2.99 2.99 0 0113 13a2.99 2.99 0 01-.879 2.121z" clipRule="evenodd" />
-        </svg>
-        <span className="text-[12px] font-bold text-gray-700">話題のキーワード</span>
+    <div className="bg-surface-container-lowest rounded-2xl shadow-card overflow-hidden">
+      <div className="px-4 py-3 bg-surface-container-low flex items-center gap-2">
+        <span className="text-[12px] font-bold text-primary font-headline">🔥 話題のキーワード</span>
       </div>
       <div className="px-3 py-2 flex flex-wrap gap-1.5">
         {KEYWORDS.map((kw, i) => (
@@ -29,9 +51,9 @@ export default function TrendingWidget() {
             href={`https://www.google.co.jp/search?q=${encodeURIComponent(kw)}`}
             target="_blank"
             rel="noopener noreferrer"
-            className="inline-flex items-center gap-0.5 text-[11px] text-teal-700 bg-teal-50 hover:bg-teal-100 border border-teal-200 px-2 py-0.5 rounded transition-colors"
+            className="inline-flex items-center gap-0.5 text-[11px] text-primary bg-primary/8 hover:bg-primary/15 px-2 py-0.5 rounded-full transition-colors"
           >
-            <span className="text-teal-400 text-[9px]">#</span>
+            <span className="opacity-60 text-[9px]">#</span>
             {kw}
           </a>
         ))}

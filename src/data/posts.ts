@@ -8,13 +8,13 @@ export type Topic =
   | "なんでも";
 
 export const TOPICS: { id: Topic; emoji: string; color: string }[] = [
+  { id: "なんでも",        emoji: "☁️", color: "bg-gray-50 text-gray-600 border-gray-200" },
   { id: "仕事・AI",        emoji: "💼", color: "bg-blue-50 text-blue-600 border-blue-200" },
   { id: "孤独・さみしさ",  emoji: "🫂", color: "bg-purple-50 text-purple-600 border-purple-200" },
   { id: "眠れない・不安",  emoji: "🌙", color: "bg-indigo-50 text-indigo-600 border-indigo-200" },
   { id: "家族・人間関係",  emoji: "🏠", color: "bg-orange-50 text-orange-600 border-orange-200" },
   { id: "恋愛・パートナー",emoji: "💬", color: "bg-pink-50 text-pink-600 border-pink-200" },
   { id: "体・こころ",      emoji: "🌿", color: "bg-green-50 text-green-600 border-green-200" },
-  { id: "なんでも",        emoji: "☁️", color: "bg-gray-50 text-gray-600 border-gray-200" },
 ];
 
 export interface Reply {

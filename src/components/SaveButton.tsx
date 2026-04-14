@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
 
 interface Props {
@@ -93,7 +94,7 @@ export default function SaveButton({ postId }: Props) {
             </div>
             <button
               onClick={loginWithGoogle}
-              className="w-full py-2.5 border border-gray-200 rounded-xl text-[13px] text-gray-600 hover:bg-gray-50 transition-colors flex items-center justify-center gap-2 mb-3"
+              className="w-full py-2.5 border border-gray-200 rounded-xl text-[13px] text-gray-600 hover:bg-gray-50 transition-colors flex items-center justify-center gap-2 mb-2"
             >
               <svg className="w-4 h-4" viewBox="0 0 24 24">
                 <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92a5.06 5.06 0 01-2.2 3.32v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.1z" fill="#4285F4"/>
@@ -103,6 +104,20 @@ export default function SaveButton({ postId }: Props) {
               </svg>
               Googleでログイン（無料）
             </button>
+            <div className="flex gap-2 mb-3">
+              <Link
+                href="/auth/login"
+                className="flex-1 py-2 border border-gray-200 rounded-xl text-[13px] text-gray-600 hover:bg-gray-50 transition-colors text-center"
+              >
+                メールでログイン
+              </Link>
+              <Link
+                href="/auth/signup"
+                className="flex-1 py-2 bg-teal-600 hover:bg-teal-700 rounded-xl text-[13px] text-white font-semibold transition-colors text-center"
+              >
+                新規登録
+              </Link>
+            </div>
             <button
               onClick={() => setShowModal(false)}
               className="w-full text-[12px] text-gray-400 hover:text-gray-600 transition-colors"

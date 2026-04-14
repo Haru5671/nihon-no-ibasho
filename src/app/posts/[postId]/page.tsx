@@ -79,11 +79,11 @@ export default async function PostPage({ params }: { params: { postId: string } 
             </div>
           </div>
 
-          {/* AdSense ad between post and replies */}
-          <AdSenseUnit className="mb-4" />
-
           {/* Replies + reply form (client component) */}
           <ThreadClient postId={params.postId} body={post.body} />
+
+          {/* AdSense ad below reply button area */}
+          <AdSenseUnit className="mt-4" />
         </div>
       </main>
       <Footer />

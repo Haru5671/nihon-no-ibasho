@@ -16,11 +16,19 @@ interface ThreadClientProps {
   body: string;
 }
 
+const NICKNAME_KEY = "ibasho_nickname";
+
 export default function ThreadClient({ postId, body }: ThreadClientProps) {
   const [replies, setReplies] = useState<Reply[]>([]);
   const [replyInput, setReplyInput] = useState("");
+  const [nickname, setNickname] = useState("");
   const [loading, setLoading] = useState(true);
   const [replyError, setReplyError] = useState<string | null>(null);
+
+  useEffect(() => {
+    const saved = typeof window !== "undefined" ? localStorage.getItem(NICKNAME_KEY) ?? "" : "";
+    setNickname(saved);
+  }, []);
 
   useEffect(() => {
     fetch(`/api/posts/${postId}/replies`)
@@ -36,7 +44,7 @@ export default function ThreadClient({ postId, body }: ThreadClientProps) {
     const res = await fetch(`/api/posts/${postId}/replies`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ body: text }),
+      body: JSON.stringify({ body: text, name: nickname.trim() || "にんげんさん" }),
     });
     if (!res.ok) {
       const json = await res.json().catch(() => ({}));
@@ -83,6 +91,17 @@ export default function ThreadClient({ postId, body }: ThreadClientProps) {
 
       {/* Reply form */}
       <div className="bg-white rounded-2xl p-4 border border-gray-200 shadow-sm">
+        <input
+          type="text"
+          value={nickname}
+          onChange={(e) => {
+            setNickname(e.target.value);
+            if (typeof window !== "undefined") localStorage.setItem(NICKNAME_KEY, e.target.value);
+          }}
+          placeholder="ニックネーム（省略可 → にんげんさん）"
+          maxLength={20}
+          className="w-full bg-gray-50 text-gray-700 placeholder-gray-300 outline-none text-[12px] rounded-lg px-3 py-2 mb-3"
+        />
         <textarea
           value={replyInput}
           onChange={(e) => setReplyInput(e.target.value)}
@@ -97,7 +116,7 @@ export default function ThreadClient({ postId, body }: ThreadClientProps) {
           </div>
         )}
         <div className="flex items-center justify-between mt-3 pt-3 border-t border-gray-100">
-          <span className="text-[11px] text-gray-400">投稿名: にんげんさん</span>
+          <span className="text-[11px] text-gray-400">⌘+Enter で送信</span>
           <button
             onClick={handleReply}
             disabled={!replyInput.trim()}

@@ -49,7 +49,7 @@ function getSavedLocation(): Location {
   return PRESET_CITIES[0];
 }
 
-export default function WeatherWidget() {
+export default function WeatherWidget({ compact }: { compact?: boolean }) {
   const [data, setData] = useState<WeatherData | null>(null);
   const [location, setLocation] = useState<Location>(PRESET_CITIES[0]);
   const [showPicker, setShowPicker] = useState(false);
@@ -106,31 +106,56 @@ export default function WeatherWidget() {
 
   const { label, icon } = data ? weatherInfo(data.weather_code) : { label: '', icon: '…' };
 
+  if (compact) {
+    return (
+      <a
+        href="https://tenki.jp/"
+        target="_blank"
+        rel="noopener noreferrer"
+        className="flex items-center gap-1.5 px-3 py-2 hover:bg-surface-container-low transition-colors"
+      >
+        <span style={{ fontSize: 16, lineHeight: 1 }}>{data ? icon : '…'}</span>
+        <span className="text-[13px] font-bold text-on-surface">
+          {data ? `${Math.round(data.temperature_2m)}°` : '--'}
+        </span>
+        <span className="text-[10px] text-on-surface-variant">{location.name}</span>
+        <span className="text-[9px] text-outline ml-auto">↗</span>
+      </a>
+    );
+  }
+
   return (
-    <div className="bg-white border border-gray-200 rounded overflow-hidden relative">
-      <div className="px-3 py-2 bg-gray-50 border-b border-gray-200 flex items-center justify-between">
-        <span className="text-[12px] font-bold text-gray-700">天気 — {location.name}</span>
+    <div className="bg-surface-container-lowest rounded-2xl shadow-card overflow-hidden relative">
+      <div className="px-4 py-3 bg-surface-container-low flex items-center justify-between">
+        <a
+          href="https://tenki.jp/"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="text-[12px] font-bold text-primary font-headline hover:text-primary/80 transition-colors"
+        >
+          天気 — {location.name} ↗
+        </a>
         <button
           onClick={() => setShowPicker(!showPicker)}
-          className="text-[10px] text-teal-600 hover:text-teal-700 hover:underline"
+          className="text-[11px] text-primary hover:underline"
         >
           変更
         </button>
       </div>
 
       {!data ? (
-        <div className="px-3 py-3 text-[11px] text-gray-400">読み込み中...</div>
+        <div className="px-4 py-3 text-[12px] text-outline">読み込み中...</div>
       ) : (
-        <div className="px-3 py-3 flex items-center gap-3">
-          <span style={{ fontSize: 28, lineHeight: 1 }}>{icon}</span>
+        <div className="px-4 py-3 flex items-center gap-3">
+          <span style={{ fontSize: 30, lineHeight: 1 }}>{icon}</span>
           <div>
-            <div className="flex items-end gap-1">
-              <span className="text-[22px] font-bold text-gray-800 leading-none">
+            <div className="flex items-end gap-1.5">
+              <span className="text-[24px] font-bold text-on-surface leading-none">
                 {Math.round(data.temperature_2m)}°
               </span>
-              <span className="text-[11px] text-gray-500 mb-0.5">{label}</span>
+              <span className="text-[12px] text-on-surface-variant mb-0.5">{label}</span>
             </div>
-            <div className="text-[11px] text-gray-400 mt-0.5">
+            <div className="text-[11px] text-outline mt-0.5">
               風速 {Math.round(data.wind_speed_10m)} km/h
             </div>
           </div>
@@ -140,22 +165,22 @@ export default function WeatherWidget() {
       {showPicker && (
         <div
           ref={pickerRef}
-          className="absolute top-full left-0 right-0 z-50 bg-white border border-gray-200 rounded-b shadow-lg"
+          className="absolute top-full left-0 right-0 z-50 bg-surface-container-lowest rounded-b-2xl shadow-float"
         >
           <button
             onClick={useGeolocation}
             disabled={locating}
-            className="w-full text-left px-3 py-2 text-[12px] text-teal-600 hover:bg-teal-50 border-b border-gray-100 font-medium flex items-center gap-1"
+            className="w-full text-left px-4 py-2.5 text-[12px] text-primary hover:bg-surface-container-low font-semibold flex items-center gap-1.5 border-b border-outline-variant/20"
           >
             <span>📍</span>
-            {locating ? '取得中...' : '現在地を使用'}
+            {locating ? "取得中..." : "現在地を使用"}
           </button>
           {PRESET_CITIES.map((city) => (
             <button
               key={city.name}
               onClick={() => selectCity(city)}
-              className={`w-full text-left px-3 py-1.5 text-[12px] hover:bg-gray-50 transition-colors ${
-                location.name === city.name ? 'text-teal-600 font-semibold' : 'text-gray-700'
+              className={`w-full text-left px-4 py-2 text-[12px] hover:bg-surface-container-low transition-colors ${
+                location.name === city.name ? "text-primary font-semibold" : "text-on-surface"
               }`}
             >
               {city.name}

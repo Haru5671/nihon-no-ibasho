@@ -28,7 +28,7 @@ function short(name: string) {
   return TEAM_SHORT[name] ?? name.slice(0, 4);
 }
 
-export default function BaseballWidget() {
+export default function BaseballWidget({ compact }: { compact?: boolean }) {
   const [games, setGames] = useState<GameScore[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -40,30 +40,60 @@ export default function BaseballWidget() {
       .finally(() => setLoading(false));
   }, []);
 
+  if (compact) {
+    const g = games[0];
+    return (
+      <a
+        href="https://npb.jp/scores/"
+        target="_blank"
+        rel="noopener noreferrer"
+        className="flex items-center gap-1.5 px-3 py-2 hover:bg-surface-container-low transition-colors"
+      >
+        <span className="text-[12px]">⚾</span>
+        {loading && <span className="text-[10px] text-outline">--</span>}
+        {!loading && !g && <span className="text-[10px] text-outline">試合なし</span>}
+        {g && (
+          <>
+            <span className="text-[11px] font-medium text-on-surface whitespace-nowrap">
+              {short(g.awayTeam)} {g.awayScore ?? '-'} - {g.homeScore ?? '-'} {short(g.homeTeam)}
+            </span>
+            <span className="text-[9px] text-outline ml-auto">↗</span>
+          </>
+        )}
+      </a>
+    );
+  }
+
   return (
-    <div className="bg-white border border-gray-200 rounded overflow-hidden">
-      <div className="px-3 py-2 bg-gray-50 border-b border-gray-200 flex items-center justify-between">
-        <span className="text-[12px] font-bold text-gray-700">⚾ プロ野球</span>
-        <span className="text-[10px] text-gray-400">NPB</span>
+    <div className="bg-surface-container-lowest rounded-2xl shadow-card overflow-hidden">
+      <div className="px-4 py-3 bg-surface-container-low flex items-center justify-between">
+        <a
+          href="https://npb.jp/scores/"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="text-[12px] font-bold text-primary font-headline hover:text-primary/80 transition-colors"
+        >
+          ⚾ プロ野球 ↗
+        </a>
+        <span className="text-[10px] text-outline">NPB</span>
       </div>
-      {loading && <div className="px-3 py-3 text-[11px] text-gray-400">読み込み中...</div>}
+      {loading && <div className="px-4 py-3 text-[12px] text-outline">読み込み中...</div>}
       {!loading && games.length === 0 && (
-        <div className="px-3 py-3 text-[11px] text-gray-400">本日の試合はありません</div>
+        <div className="px-4 py-3 text-[12px] text-outline">本日の試合はありません</div>
       )}
-      <div className="divide-y divide-gray-100">
+      <div>
         {games.map((g, i) => (
-          <div key={i} className="px-3 py-2 flex items-center gap-2 text-[12px]">
-            <span className={`text-[10px] px-1.5 py-0.5 rounded font-medium shrink-0 ${
-              g.status === '終了' ? 'bg-gray-100 text-gray-500' :
-              g.status.includes('回') ? 'bg-green-100 text-green-700' :
-              g.status === '予定' ? 'bg-blue-50 text-blue-600' :
-              'bg-blue-50 text-blue-600'
+          <div key={i} className="px-4 py-2.5 flex items-center gap-2 text-[12px]">
+            <span className={`text-[10px] px-2 py-0.5 rounded-full font-semibold shrink-0 ${
+              g.status === "終了" ? "bg-surface-container text-outline" :
+              g.status.includes("回") ? "bg-primary/10 text-primary" :
+              "bg-secondary-fixed text-on-secondary-fixed"
             }`}>{g.status}</span>
-            <span className="text-gray-700 font-medium shrink-0">{short(g.awayTeam)}</span>
-            <span className="font-bold text-gray-900">{g.awayScore !== null ? g.awayScore : '-'}</span>
-            <span className="text-gray-400 text-[10px]">-</span>
-            <span className="font-bold text-gray-900">{g.homeScore !== null ? g.homeScore : '-'}</span>
-            <span className="text-gray-700 font-medium shrink-0">{short(g.homeTeam)}</span>
+            <span className="text-on-surface font-medium shrink-0">{short(g.awayTeam)}</span>
+            <span className="font-bold text-on-surface">{g.awayScore !== null ? g.awayScore : "-"}</span>
+            <span className="text-outline text-[10px]">-</span>
+            <span className="font-bold text-on-surface">{g.homeScore !== null ? g.homeScore : "-"}</span>
+            <span className="text-on-surface font-medium shrink-0">{short(g.homeTeam)}</span>
           </div>
         ))}
       </div>

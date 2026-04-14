@@ -2,8 +2,19 @@
 
 import { useState, useEffect } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import Header from "@/components/Header";
+import { timeAgo } from "@/lib/utils";
+
+interface PostRow {
+  id: string;
+  body: string;
+  topic: string;
+  likes: number;
+  created_at: string;
+  replies: { count: number }[];
+}
 
 interface SavedPost {
   id: number;
@@ -18,32 +29,53 @@ interface SavedPost {
   } | null;
 }
 
+type TabId = 'saved' | 'myposts' | 'commented';
+
 export default function MyPage() {
   const supabase = createClient();
-  const [user, setUser] = useState<{ id: string; email?: string } | null>(null);
+  const router = useRouter();
+  const [user, setUser] = useState<{ id: string; email?: string; name?: string } | null>(null);
   const [saved, setSaved] = useState<SavedPost[]>([]);
+  const [myPosts, setMyPosts] = useState<PostRow[]>([]);
+  const [commented, setCommented] = useState<PostRow[]>([]);
   const [loading, setLoading] = useState(true);
+  const [activeTab, setActiveTab] = useState<TabId>('saved');
   const [searchQuery, setSearchQuery] = useState("");
+  const [emailForm, setEmailForm] = useState({ email: '', password: '' });
+  const [loginError, setLoginError] = useState('');
+  const [loginLoading, setLoginLoading] = useState(false);
+  const [deleteConfirm, setDeleteConfirm] = useState(false);
+  const [deleteLoading, setDeleteLoading] = useState(false);
+  const [showReset, setShowReset] = useState(false);
+  const [resetEmail, setResetEmail] = useState('');
+  const [resetSent, setResetSent] = useState(false);
+  const [resetLoading, setResetLoading] = useState(false);
 
   useEffect(() => {
     supabase.auth.getUser().then(({ data }) => {
       const u = data.user;
-      if (!u) {
-        setLoading(false);
-        return;
-      }
-      setUser({ id: u.id, email: u.email });
+      if (!u) { setLoading(false); return; }
+      const name = u.user_metadata?.display_name ?? u.user_metadata?.full_name ?? u.email?.split('@')[0] ?? '';
+      setUser({ id: u.id, email: u.email, name });
+      loadUserData(u.id);
+    });
+  }, []);
+
+  const loadUserData = async (uid: string) => {
+    const [savedRes, postsRes, commentedRes] = await Promise.all([
       supabase
         .from('saved_posts')
         .select('id, post_id, created_at, posts(id, body, topic, likes, created_at)')
-        .eq('user_id', u.id)
-        .order('created_at', { ascending: false })
-        .then(({ data: rows }) => {
-          setSaved((rows ?? []) as unknown as SavedPost[]);
-          setLoading(false);
-        });
-    });
-  }, []);
+        .eq('user_id', uid)
+        .order('created_at', { ascending: false }),
+      fetch('/api/user/posts').then((r) => r.ok ? r.json() : []),
+      fetch('/api/user/commented').then((r) => r.ok ? r.json() : []),
+    ]);
+    setSaved((savedRes.data ?? []) as unknown as SavedPost[]);
+    setMyPosts(Array.isArray(postsRes) ? postsRes : []);
+    setCommented(Array.isArray(commentedRes) ? commentedRes : []);
+    setLoading(false);
+  };
 
   const unsave = async (savedId: number) => {
     await supabase.from('saved_posts').delete().eq('id', savedId);
@@ -57,10 +89,83 @@ export default function MyPage() {
     });
   };
 
+  const handleEmailLogin = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setLoginError('');
+    setLoginLoading(true);
+    const { data, error } = await supabase.auth.signInWithPassword({
+      email: emailForm.email,
+      password: emailForm.password,
+    });
+    setLoginLoading(false);
+    if (error) { setLoginError('メールアドレスまたはパスワードが正しくありません'); return; }
+    if (data.user) {
+      const u = data.user;
+      const name = u.user_metadata?.display_name ?? u.user_metadata?.full_name ?? u.email?.split('@')[0] ?? '';
+      setUser({ id: u.id, email: u.email, name });
+      setLoading(true);
+      loadUserData(u.id);
+    }
+  };
+
+  const handleResetPassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setResetLoading(true);
+    await supabase.auth.resetPasswordForEmail(resetEmail, {
+      redirectTo: `${window.location.origin}/auth/update-password`,
+    });
+    setResetLoading(false);
+    setResetSent(true);
+  };
+
   const logout = async () => {
     await supabase.auth.signOut();
-    setUser(null);
-    setSaved([]);
+    router.push('/');
+  };
+
+  const handleDeleteAccount = async () => {
+    if (!deleteConfirm) { setDeleteConfirm(true); return; }
+    setDeleteLoading(true);
+    const res = await fetch('/api/user/delete', { method: 'DELETE' });
+    if (res.ok) {
+      await supabase.auth.signOut();
+      router.push('/');
+    } else {
+      setDeleteLoading(false);
+      setDeleteConfirm(false);
+      alert('退会処理に失敗しました。しばらく経ってから再試行してください。');
+    }
+  };
+
+  const tabs: { id: TabId; label: string; count: number }[] = [
+    { id: 'saved', label: '保存した投稿', count: saved.length },
+    { id: 'myposts', label: '自分の投稿', count: myPosts.length },
+    { id: 'commented', label: 'コメントした投稿', count: commented.length },
+  ];
+
+  const PostCard = ({ post, onUnsave, savedId }: { post: PostRow | SavedPost['posts']; onUnsave?: () => void; savedId?: number }) => {
+    if (!post) return <p className="text-[12px] text-gray-400">削除された投稿</p>;
+    const replyCount = 'replies' in post ? (post as PostRow).replies?.[0]?.count ?? 0 : 0;
+    return (
+      <div className="bg-white rounded-xl border border-gray-200 p-4 hover:border-teal-200 transition-colors">
+        <div className="flex items-start justify-between gap-2 mb-2">
+          <span className="text-[10px] px-1.5 py-0.5 bg-gray-100 text-gray-500 rounded">{post.topic}</span>
+          <div className="flex items-center gap-2">
+            <span className="text-[10px] text-gray-400">{timeAgo(post.created_at)}</span>
+            {onUnsave && savedId && (
+              <button onClick={() => onUnsave()} className="text-[10px] text-gray-300 hover:text-red-400 transition-colors">削除</button>
+            )}
+          </div>
+        </div>
+        <Link href={`/posts/${post.id}`}>
+          <p className="text-[13px] text-gray-700 leading-relaxed line-clamp-3 hover:text-teal-700 transition-colors">{post.body}</p>
+        </Link>
+        <div className="text-[10px] text-gray-400 mt-2 flex items-center gap-3">
+          <span>♥ {post.likes}</span>
+          {replyCount > 0 && <span>💬 {replyCount}</span>}
+        </div>
+      </div>
+    );
   };
 
   return (
@@ -69,7 +174,6 @@ export default function MyPage() {
       <main className="bg-[#f8fafb] min-h-screen pt-24 pb-12 px-4">
         <div className="max-w-xl mx-auto">
 
-          {/* Header */}
           <div className="flex items-center justify-between mb-6">
             <h1 className="text-[20px] font-bold text-gray-800">マイページ</h1>
             <Link href="/" className="text-[12px] text-teal-600 hover:underline">← 広場へ</Link>
@@ -77,16 +181,49 @@ export default function MyPage() {
 
           {/* Not logged in */}
           {!loading && !user && (
-            <div className="bg-white rounded-2xl p-8 text-center border border-gray-200">
-              <div className="text-4xl mb-3">🔖</div>
-              <h2 className="text-[16px] font-bold text-gray-800 mb-2">ログインしてマイページを使う</h2>
-              <p className="text-[12px] text-gray-500 mb-5 leading-relaxed">
-                気になった投稿を保存して後で見返せます。<br />
-                Googleアカウントで無料で利用できます。
-              </p>
+            <div className="bg-white rounded-2xl p-6 border border-gray-200">
+              <div className="text-center mb-5">
+                <div className="text-4xl mb-3">🔖</div>
+                <h2 className="text-[16px] font-bold text-gray-800 mb-2">ログインしてマイページを使う</h2>
+                <p className="text-[12px] text-gray-500 leading-relaxed">気になった投稿を保存して後で見返せます。</p>
+              </div>
+
+              <form onSubmit={handleEmailLogin} className="space-y-2 mb-4">
+                <input
+                  type="email"
+                  value={emailForm.email}
+                  onChange={(e) => setEmailForm((f) => ({ ...f, email: e.target.value }))}
+                  placeholder="メールアドレス"
+                  className="w-full px-3 py-2.5 border border-gray-200 rounded-xl text-[13px] outline-none focus:border-teal-400 transition-colors"
+                  required
+                />
+                <input
+                  type="password"
+                  value={emailForm.password}
+                  onChange={(e) => setEmailForm((f) => ({ ...f, password: e.target.value }))}
+                  placeholder="パスワード"
+                  className="w-full px-3 py-2.5 border border-gray-200 rounded-xl text-[13px] outline-none focus:border-teal-400 transition-colors"
+                  required
+                />
+                {loginError && <p className="text-[11px] text-red-500">{loginError}</p>}
+                <button
+                  type="submit"
+                  disabled={loginLoading}
+                  className="w-full py-2.5 bg-teal-600 hover:bg-teal-700 text-white text-[13px] font-bold rounded-xl transition-colors disabled:opacity-40"
+                >
+                  {loginLoading ? 'ログイン中...' : 'ログイン'}
+                </button>
+              </form>
+
+              <div className="flex items-center gap-2 mb-4">
+                <div className="flex-1 h-px bg-gray-100" />
+                <span className="text-[11px] text-gray-400">または</span>
+                <div className="flex-1 h-px bg-gray-100" />
+              </div>
+
               <button
                 onClick={loginWithGoogle}
-                className="w-full max-w-xs mx-auto py-2.5 border border-gray-200 rounded-xl text-[13px] text-gray-600 hover:bg-gray-50 transition-colors flex items-center justify-center gap-2"
+                className="w-full py-2.5 border border-gray-200 rounded-xl text-[13px] text-gray-600 hover:bg-gray-50 transition-colors flex items-center justify-center gap-2 mb-3"
               >
                 <svg className="w-4 h-4" viewBox="0 0 24 24">
                   <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92a5.06 5.06 0 01-2.2 3.32v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.1z" fill="#4285F4"/>
@@ -96,10 +233,62 @@ export default function MyPage() {
                 </svg>
                 Googleでログイン
               </button>
+
+              <p className="text-center text-[12px] text-gray-400">
+                アカウントをお持ちでない方は
+                <a href="/auth/signup" className="text-teal-600 hover:underline ml-1">新規登録</a>
+              </p>
+
+              {/* Password reset */}
+              <div className="mt-5 pt-5 border-t border-gray-100">
+                {!showReset && (
+                  <button
+                    onClick={() => setShowReset(true)}
+                    className="w-full text-[12px] text-gray-400 hover:text-teal-600 transition-colors text-center"
+                  >
+                    パスワードをお忘れの場合
+                  </button>
+                )}
+                {showReset && !resetSent && (
+                  <form onSubmit={handleResetPassword} className="space-y-2">
+                    <p className="text-[12px] text-gray-600 font-semibold">パスワード再設定メールを送信</p>
+                    <p className="text-[11px] text-gray-400">登録済みのメールアドレスを入力してください。再設定用のリンクをお送りします。</p>
+                    <input
+                      type="email"
+                      value={resetEmail}
+                      onChange={(e) => setResetEmail(e.target.value)}
+                      placeholder="email@example.com"
+                      required
+                      className="w-full px-3 py-2.5 border border-gray-200 rounded-xl text-[13px] outline-none focus:border-teal-400 transition-colors"
+                    />
+                    <div className="flex gap-2">
+                      <button
+                        type="submit"
+                        disabled={resetLoading}
+                        className="flex-1 py-2 bg-teal-600 hover:bg-teal-700 text-white text-[12px] font-bold rounded-xl transition-colors disabled:opacity-40"
+                      >
+                        {resetLoading ? '送信中...' : '再設定メールを送る'}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setShowReset(false)}
+                        className="px-4 py-2 border border-gray-200 text-gray-400 text-[12px] rounded-xl hover:bg-gray-50 transition-colors"
+                      >
+                        キャンセル
+                      </button>
+                    </div>
+                  </form>
+                )}
+                {resetSent && (
+                  <div className="bg-teal-50 border border-teal-200 rounded-xl p-3 text-center">
+                    <p className="text-[12px] text-teal-700 font-semibold">✓ 再設定メールを送信しました</p>
+                    <p className="text-[11px] text-teal-600 mt-1">メール内のリンクからパスワードを再設定してください。</p>
+                  </div>
+                )}
+              </div>
             </div>
           )}
 
-          {/* Loading */}
           {loading && (
             <div className="text-center py-12 text-gray-400 text-[13px]">読み込み中...</div>
           )}
@@ -107,11 +296,11 @@ export default function MyPage() {
           {/* Logged in */}
           {!loading && user && (
             <>
-              {/* User info */}
+              {/* User info card */}
               <div className="bg-white rounded-2xl border border-gray-200 p-4 mb-4 flex items-center justify-between">
                 <div>
-                  <div className="text-[13px] font-semibold text-gray-700">{user.email ?? 'ログイン済み'}</div>
-                  <div className="text-[11px] text-gray-400 mt-0.5">保存済み {saved.length}件</div>
+                  <div className="text-[13px] font-semibold text-gray-700">{user.name || user.email || 'ログイン済み'}</div>
+                  <div className="text-[11px] text-gray-400 mt-0.5">{user.email}</div>
                 </div>
                 <button
                   onClick={logout}
@@ -121,40 +310,104 @@ export default function MyPage() {
                 </button>
               </div>
 
-              {/* Saved posts */}
+              {/* Tabs */}
+              <div className="flex border-b border-gray-200 mb-4 bg-white rounded-t-xl overflow-hidden">
+                {tabs.map((tab) => (
+                  <button
+                    key={tab.id}
+                    onClick={() => setActiveTab(tab.id)}
+                    className={`flex-1 py-3 text-[12px] font-semibold transition-colors border-b-2 ${
+                      activeTab === tab.id
+                        ? 'text-teal-600 border-teal-600'
+                        : 'text-gray-400 border-transparent hover:text-gray-600'
+                    }`}
+                  >
+                    {tab.label}
+                    {tab.count > 0 && (
+                      <span className="ml-1 text-[10px] text-gray-400">({tab.count})</span>
+                    )}
+                  </button>
+                ))}
+              </div>
+
+              {/* Tab content */}
               <div className="space-y-2">
-                <h2 className="text-[13px] font-bold text-gray-600 mb-3">保存した投稿</h2>
-                {saved.length === 0 && (
-                  <div className="bg-white rounded-xl border border-gray-200 p-6 text-center text-gray-400 text-[13px]">
-                    まだ保存した投稿がありません。<br />
-                    投稿の 🔖 ボタンから保存できます。
+                {activeTab === 'saved' && (
+                  <>
+                    {saved.length === 0 && (
+                      <div className="bg-white rounded-xl border border-gray-200 p-6 text-center text-gray-400 text-[13px]">
+                        まだ保存した投稿がありません。<br />投稿の 🔖 ボタンから保存できます。
+                      </div>
+                    )}
+                    {saved.map((s) => (
+                      <PostCard
+                        key={s.id}
+                        post={s.posts as unknown as PostRow}
+                        onUnsave={() => unsave(s.id)}
+                        savedId={s.id}
+                      />
+                    ))}
+                  </>
+                )}
+
+                {activeTab === 'myposts' && (
+                  <>
+                    {myPosts.length === 0 && (
+                      <div className="bg-white rounded-xl border border-gray-200 p-6 text-center text-gray-400 text-[13px]">
+                        ログイン後に投稿した記事がここに表示されます。
+                      </div>
+                    )}
+                    {myPosts.map((p) => (
+                      <PostCard key={p.id} post={p} />
+                    ))}
+                  </>
+                )}
+
+                {activeTab === 'commented' && (
+                  <>
+                    {commented.length === 0 && (
+                      <div className="bg-white rounded-xl border border-gray-200 p-6 text-center text-gray-400 text-[13px]">
+                        コメントした投稿がここに表示されます。
+                      </div>
+                    )}
+                    {commented.map((p) => (
+                      <PostCard key={p.id} post={p} />
+                    ))}
+                  </>
+                )}
+              </div>
+
+              {/* Withdrawal section */}
+              <div className="mt-12 pt-6 border-t border-gray-100">
+                <p className="text-[11px] text-gray-400 mb-2">アカウント管理</p>
+                {!deleteConfirm ? (
+                  <button
+                    onClick={() => setDeleteConfirm(true)}
+                    className="text-[11px] text-gray-400 hover:text-red-500 transition-colors underline"
+                  >
+                    退会する
+                  </button>
+                ) : (
+                  <div className="bg-red-50 border border-red-200 rounded-xl p-4">
+                    <p className="text-[13px] font-bold text-red-700 mb-1">本当に退会しますか？</p>
+                    <p className="text-[11px] text-red-600 mb-3">保存データはすべて削除されます。この操作は取り消せません。</p>
+                    <div className="flex gap-2">
+                      <button
+                        onClick={handleDeleteAccount}
+                        disabled={deleteLoading}
+                        className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white text-[12px] font-bold rounded-lg transition-colors disabled:opacity-40"
+                      >
+                        {deleteLoading ? '処理中...' : '退会する'}
+                      </button>
+                      <button
+                        onClick={() => setDeleteConfirm(false)}
+                        className="px-4 py-2 border border-gray-200 text-gray-500 text-[12px] rounded-lg hover:bg-gray-50 transition-colors"
+                      >
+                        キャンセル
+                      </button>
+                    </div>
                   </div>
                 )}
-                {saved.map((s) => (
-                  <div key={s.id} className="bg-white rounded-xl border border-gray-200 p-4 hover:border-teal-200 transition-colors">
-                    {s.posts ? (
-                      <>
-                        <div className="flex items-start justify-between gap-2 mb-2">
-                          <span className="text-[10px] px-1.5 py-0.5 bg-gray-100 text-gray-500 rounded">{s.posts.topic}</span>
-                          <button
-                            onClick={() => unsave(s.id)}
-                            className="text-[10px] text-gray-300 hover:text-red-400 transition-colors shrink-0"
-                          >
-                            削除
-                          </button>
-                        </div>
-                        <Link href={`/posts/${s.posts.id}`}>
-                          <p className="text-[13px] text-gray-700 leading-relaxed line-clamp-3 hover:text-teal-700 transition-colors">{s.posts.body}</p>
-                        </Link>
-                        <div className="text-[10px] text-gray-400 mt-2">
-                          ♥ {s.posts.likes} · {new Date(s.posts.created_at).toLocaleDateString('ja-JP')}
-                        </div>
-                      </>
-                    ) : (
-                      <p className="text-[12px] text-gray-400">削除された投稿</p>
-                    )}
-                  </div>
-                ))}
               </div>
             </>
           )}

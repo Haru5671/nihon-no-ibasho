@@ -1,8 +1,9 @@
 import { NextResponse } from 'next/server';
+import { createClient as createServerClient } from '@/lib/supabase/server';
 import { createClient } from '@supabase/supabase-js';
 import { checkModeration } from '@/lib/moderate';
 
-function db() {
+function anonDb() {
   return createClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
@@ -10,7 +11,7 @@ function db() {
 }
 
 export async function GET() {
-  const { data, error } = await db()
+  const { data, error } = await anonDb()
     .from('posts')
     .select('*, replies(count)')
     .order('created_at', { ascending: false });
@@ -20,19 +21,28 @@ export async function GET() {
 }
 
 export async function POST(req: Request) {
-  const { body, topic } = await req.json();
+  const { body, topic, name } = await req.json();
   if (!body?.trim() || !topic) {
     return NextResponse.json({ error: 'body and topic are required' }, { status: 400 });
   }
+  const postName = (typeof name === 'string' && name.trim()) ? name.trim().slice(0, 20) : 'にんげんさん';
 
   const mod = checkModeration(body.trim());
   if (!mod.ok) {
     return NextResponse.json({ error: mod.reason }, { status: 422 });
   }
 
-  const { data, error } = await db()
+  // Optionally attach user_id if logged in
+  let userId: string | undefined;
+  try {
+    const serverClient = createServerClient();
+    const { data: { user } } = await serverClient.auth.getUser();
+    if (user) userId = user.id;
+  } catch { /* ok — anonymous */ }
+
+  const { data, error } = await anonDb()
     .from('posts')
-    .insert({ name: 'にんげんさん', body: body.trim(), topic })
+    .insert({ name: postName, body: body.trim(), topic, ...(userId ? { user_id: userId } : {}) })
     .select()
     .single();
 

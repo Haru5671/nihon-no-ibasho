@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Hiroba from "./Hiroba";
 import Kobeya from "./Kobeya";
 import KobeyaRoom, { type Room } from "./KobeyaRoom";
@@ -23,22 +23,29 @@ type TabId = (typeof tabs)[number]["id"];
 interface AppTabsProps {
   initialTopic?: Topic;
   onTopicSelect?: (topic: Topic) => void;
+  onTopicClear?: () => void;
   searchQuery?: string;
 }
 
-export default function AppTabs({ initialTopic, onTopicSelect, searchQuery = "" }: AppTabsProps) {
+export default function AppTabs({ initialTopic, onTopicSelect, onTopicClear, searchQuery = "" }: AppTabsProps) {
   const [active, setActive] = useState<TabId>("hiroba");
   const [hirohaTopic, setHirohaTopic] = useState<Topic | undefined>(initialTopic);
   const [activeRoom, setActiveRoom] = useState<Room | null>(null);
+
+  useEffect(() => {
+    if (initialTopic !== undefined) {
+      setHirohaTopic(initialTopic);
+      setActive("hiroba");
+      setActiveRoom(null);
+    }
+  }, [initialTopic]);
 
   const handleEnterRoom = (room: Room) => {
     setActiveRoom(room);
     setActive("kobeya");
   };
 
-  const handleLeaveRoom = () => {
-    setActiveRoom(null);
-  };
+  const handleLeaveRoom = () => setActiveRoom(null);
 
   const handleTopicClick = (topic: Topic) => {
     setHirohaTopic(topic);
@@ -47,41 +54,44 @@ export default function AppTabs({ initialTopic, onTopicSelect, searchQuery = "" 
   };
 
   return (
-    <section className="bg-[#f4f4f2] min-h-screen" id="hiroba">
-      {/* Tab bar */}
-      <div className="sticky top-[76px] z-40 bg-white border-b border-gray-200">
-        <div className="max-w-5xl mx-auto px-3 sm:px-4 flex items-center justify-between">
+    <section className="bg-surface-container min-h-screen" id="hiroba">
+      {/* Sticky tab bar */}
+      <div className="sticky top-[80px] z-40 glass-nav border-b border-outline-variant/20">
+        <div className="max-w-7xl mx-auto px-4 sm:px-8 flex items-center justify-between">
           <div className="flex">
             {tabs.map((tab) => (
               <button
                 key={tab.id}
                 onClick={() => { setActive(tab.id); if (tab.id !== "kobeya") setActiveRoom(null); }}
-                className={`py-3 px-3 sm:px-4 text-[13px] font-semibold transition-colors relative border-b-2 ${
+                className={`py-3 px-4 sm:px-5 text-[13px] font-semibold transition-colors relative border-b-2 ${
                   active === tab.id
-                    ? "text-teal-600 border-teal-600"
-                    : "text-gray-400 border-transparent hover:text-gray-600"
+                    ? "text-primary border-primary"
+                    : "text-outline border-transparent hover:text-on-surface"
                 }`}
               >
-                {tab.label}
+                <span className="font-headline">{tab.label}</span>
                 <span className="hidden sm:inline text-[11px] font-normal ml-1 opacity-60">— {tab.desc}</span>
               </button>
             ))}
           </div>
-          <span className="text-[11px] text-gray-400 hidden sm:block">悪口禁止 · 匿名</span>
+          <span className="text-[11px] text-outline hidden sm:block">悪口禁止・匿名</span>
         </div>
       </div>
 
       {/* 2-column layout */}
-      <div className="max-w-5xl mx-auto px-3 sm:px-4 py-3 flex gap-4 items-start">
+      <div className="max-w-7xl mx-auto px-4 sm:px-8 py-6 flex gap-6 items-start">
 
         {/* Main content */}
         <div className="flex-1 min-w-0">
-          {/* Mobile widget bar */}
-          <div className="lg:hidden mb-3 flex gap-2 overflow-x-auto pb-1" style={{ scrollbarWidth: 'none' }}>
-            <div className="shrink-0 w-[260px]"><TrendingWidget /></div>
-            <div className="shrink-0 w-[200px]"><WeatherWidget /></div>
-            <div className="shrink-0 w-[220px]"><BaseballWidget /></div>
+          {/* Mobile widget compact bar */}
+          <div className="lg:hidden mb-3 bg-surface-container-lowest rounded-xl shadow-card overflow-hidden divide-y divide-outline-variant/15">
+            <TrendingWidget compact />
+            <div className="flex divide-x divide-outline-variant/15">
+              <div className="flex-1 min-w-0"><WeatherWidget compact /></div>
+              <div className="flex-1 min-w-0"><BaseballWidget compact /></div>
+            </div>
           </div>
+
           {active === "hiroba" && <Hiroba defaultTopic={hirohaTopic} searchQuery={searchQuery} />}
           {active === "kobeya" && !activeRoom && <Kobeya onEnterRoom={handleEnterRoom} />}
           {active === "kobeya" && activeRoom && (
@@ -90,31 +100,29 @@ export default function AppTabs({ initialTopic, onTopicSelect, searchQuery = "" 
         </div>
 
         {/* Right sidebar */}
-        <aside className="hidden lg:block w-[240px] shrink-0 space-y-3">
+        <aside className="hidden lg:flex flex-col w-[260px] shrink-0 gap-4">
 
-          {/* Trending keywords */}
+          {/* Trending */}
           <TrendingWidget />
 
-          {/* Weather */}
+          {/* Weather + Baseball side by side */}
           <WeatherWidget />
-
-          {/* Baseball */}
           <BaseballWidget />
 
-          {/* Ad unit */}
-          <AdSenseUnit className="overflow-hidden rounded border border-gray-200" />
+          {/* Ad */}
+          <AdSenseUnit className="overflow-hidden rounded-2xl" />
 
-          {/* Topics */}
-          <div className="bg-white border border-gray-200 rounded overflow-hidden">
-            <div className="px-3 py-2 bg-gray-50 border-b border-gray-200">
-              <span className="text-[12px] font-bold text-gray-700">トピックから探す</span>
+          {/* Topic filter */}
+          <div className="bg-surface-container-lowest rounded-2xl shadow-card overflow-hidden">
+            <div className="px-5 py-4 bg-surface-container-low">
+              <span className="text-[12px] font-bold text-primary font-headline">トピックから探す</span>
             </div>
-            <div className="divide-y divide-gray-100">
+            <div className="py-2">
               <button
-                onClick={() => { setHirohaTopic(undefined); setActive("hiroba"); }}
-                className="w-full text-left px-3 py-2 text-[12px] text-teal-600 hover:bg-gray-50 font-semibold transition-colors flex items-center gap-2"
+                onClick={() => { setHirohaTopic(undefined); setActive("hiroba"); onTopicClear?.(); }}
+                className="w-full text-left px-5 py-2.5 text-[12px] text-primary hover:bg-surface-container-low font-semibold transition-colors flex items-center gap-2"
               >
-                <svg width="14" height="14" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">
+                <svg width="13" height="13" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">
                   <rect x="2" y="2" width="7" height="7" rx="1" /><rect x="11" y="2" width="7" height="7" rx="1" />
                   <rect x="2" y="11" width="7" height="7" rx="1" /><rect x="11" y="11" width="7" height="7" rx="1" />
                 </svg>
@@ -124,11 +132,13 @@ export default function AppTabs({ initialTopic, onTopicSelect, searchQuery = "" 
                 <button
                   key={t.id}
                   onClick={() => handleTopicClick(t.id)}
-                  className={`w-full text-left px-3 py-2 text-[12px] hover:bg-teal-50 hover:text-teal-700 transition-colors flex items-center gap-2 ${
-                    hirohaTopic === t.id && active === 'hiroba' ? 'bg-teal-50 text-teal-700 font-semibold' : 'text-gray-700'
+                  className={`w-full text-left px-5 py-2.5 text-[12px] transition-colors flex items-center gap-2 ${
+                    hirohaTopic === t.id && active === "hiroba"
+                      ? "bg-primary/8 text-primary font-semibold"
+                      : "text-on-surface hover:bg-surface-container-low"
                   }`}
                 >
-                  <TopicIcon topic={t.id} size={14} />
+                  <TopicIcon topic={t.id} size={13} />
                   {t.id}
                 </button>
               ))}
@@ -139,9 +149,9 @@ export default function AppTabs({ initialTopic, onTopicSelect, searchQuery = "" 
           <NewsWidget />
 
           {/* About */}
-          <div className="bg-white border border-gray-200 rounded p-3">
-            <p className="text-[11px] font-bold text-gray-700 mb-1.5">にほんのいばしょとは</p>
-            <p className="text-[11px] text-gray-500 leading-relaxed">
+          <div className="bg-surface-container-lowest rounded-2xl shadow-card p-5">
+            <p className="text-[12px] font-bold text-primary mb-2 font-headline">にほんのいばしょとは</p>
+            <p className="text-[12px] text-on-surface-variant leading-relaxed">
               AI失業・失業手当・再就職・クビ・有休消化など、誰にも相談できない悩みを匿名で話せる場所。登録不要・完全無料。
             </p>
           </div>

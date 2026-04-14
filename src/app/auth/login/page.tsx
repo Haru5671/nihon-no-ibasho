@@ -10,6 +10,10 @@ export default function LoginPage() {
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+  const [showReset, setShowReset] = useState(false);
+  const [resetEmail, setResetEmail] = useState("");
+  const [resetSent, setResetSent] = useState(false);
+  const [resetLoading, setResetLoading] = useState(false);
   const supabase = createClient();
 
   const handleLogin = async (e: React.FormEvent) => {
@@ -29,6 +33,16 @@ export default function LoginPage() {
     }
 
     window.location.href = "/";
+  };
+
+  const handleResetPassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setResetLoading(true);
+    await supabase.auth.resetPasswordForEmail(resetEmail, {
+      redirectTo: `${window.location.origin}/auth/update-password`,
+    });
+    setResetLoading(false);
+    setResetSent(true);
   };
 
   const handleGoogleLogin = async () => {
@@ -121,6 +135,53 @@ export default function LoginPage() {
               新規登録
             </Link>
           </p>
+
+          <div className="mt-6 pt-6 border-t border-gray-100">
+            {!showReset && (
+              <button
+                onClick={() => setShowReset(true)}
+                className="w-full text-sm text-gray-400 hover:text-teal-600 transition-colors text-center"
+              >
+                パスワードをお忘れの場合
+              </button>
+            )}
+            {showReset && !resetSent && (
+              <form onSubmit={handleResetPassword} className="space-y-3">
+                <p className="text-sm font-semibold text-gray-700">パスワード再設定メールを送信</p>
+                <p className="text-xs text-gray-400">登録済みのメールアドレスを入力してください。</p>
+                <input
+                  type="email"
+                  value={resetEmail}
+                  onChange={(e) => setResetEmail(e.target.value)}
+                  placeholder="email@example.com"
+                  required
+                  className="w-full px-4 py-2.5 border border-gray-200 rounded-lg text-sm outline-none focus:border-teal-400 transition-colors"
+                />
+                <div className="flex gap-2">
+                  <button
+                    type="submit"
+                    disabled={resetLoading}
+                    className="flex-1 py-2.5 bg-teal-500 hover:bg-teal-600 text-white rounded-lg text-sm font-medium transition-colors disabled:opacity-50"
+                  >
+                    {resetLoading ? "送信中..." : "再設定メールを送る"}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setShowReset(false)}
+                    className="px-4 py-2.5 border border-gray-200 text-gray-400 text-sm rounded-lg hover:bg-gray-50 transition-colors"
+                  >
+                    キャンセル
+                  </button>
+                </div>
+              </form>
+            )}
+            {resetSent && (
+              <div className="bg-teal-50 border border-teal-200 rounded-lg p-3 text-center">
+                <p className="text-sm font-semibold text-teal-700">✓ 再設定メールを送信しました</p>
+                <p className="text-xs text-teal-600 mt-1">メール内のリンクからパスワードを再設定してください。</p>
+              </div>
+            )}
+          </div>
         </div>
       </main>
     </>

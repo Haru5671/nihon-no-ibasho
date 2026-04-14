@@ -4,17 +4,6 @@ import { useState, useEffect, useRef } from "react";
 import { TOPICS, type Topic } from "@/data/posts";
 import { createClient } from "@/lib/supabase/client";
 
-// Jitsi Meet External API type
-interface JitsiAPI {
-  dispose: () => void;
-  executeCommand: (command: string, ...args: unknown[]) => void;
-  on: (event: string, listener: () => void) => void;
-}
-declare global {
-  interface Window {
-    JitsiMeetExternalAPI: new (domain: string, options: Record<string, unknown>) => JitsiAPI;
-  }
-}
 
 export interface Room {
   id: number;
@@ -32,6 +21,11 @@ interface Message {
   created_at: string;
 }
 
+// チャット上に表示するアイテム（メッセージ or システム通知）
+type ChatItem =
+  | (Message & { itemType: 'message' })
+  | { itemType: 'system'; id: string; body: string; created_at: string };
+
 interface ActiveUser {
   id: string;
   name: string;
@@ -46,39 +40,53 @@ function timeLabel(ts: string) {
   return new Date(ts).toLocaleTimeString('ja-JP', { hour: '2-digit', minute: '2-digit' });
 }
 
-function loadJitsiScript(cb: () => void) {
-  if (window.JitsiMeetExternalAPI) { cb(); return; }
-  const existing = document.querySelector('script[data-jitsi-api]');
-  if (existing) {
-    existing.addEventListener('load', cb, { once: true });
-    return;
-  }
-  const s = document.createElement('script');
-  s.src = 'https://meet.jit.si/external_api.js';
-  s.setAttribute('data-jitsi-api', '1');
-  s.addEventListener('load', cb, { once: true });
-  document.head.appendChild(s);
+function dateTimeLabel(ts: string) {
+  const d = new Date(ts);
+  const now = new Date();
+  const isToday = d.toDateString() === now.toDateString();
+  const yesterday = new Date(now);
+  yesterday.setDate(now.getDate() - 1);
+  const isYesterday = d.toDateString() === yesterday.toDateString();
+  const time = d.toLocaleTimeString('ja-JP', { hour: '2-digit', minute: '2-digit' });
+  if (isToday) return `今日 ${time}`;
+  if (isYesterday) return `昨日 ${time}`;
+  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')} ${time}`;
+}
+
+// 前のアイテムから30分以上離れていたらタイムスタンプ区切りを表示
+function shouldShowTimestamp(items: ChatItem[], index: number): boolean {
+  if (index === 0) return true;
+  const prev = items[index - 1];
+  const curr = items[index];
+  const diff = new Date(curr.created_at).getTime() - new Date(prev.created_at).getTime();
+  return diff > 30 * 60 * 1000;
 }
 
 export default function KobeyaRoom({ room, onLeave }: KobeyaRoomProps) {
   const topicMeta = TOPICS.find((t) => t.id === room.topic) ?? TOPICS[TOPICS.length - 1];
   const supabase = createClient();
 
-  const [messages, setMessages] = useState<Message[]>([]);
+  const [chatItems, setChatItems] = useState<ChatItem[]>([]);
   const [input, setInput] = useState("");
   const [loadingMsgs, setLoadingMsgs] = useState(true);
   const [activeUsers, setActiveUsers] = useState<ActiveUser[]>([]);
-  const [voiceActive, setVoiceActive] = useState(false);
-  const [voiceUserName, setVoiceUserName] = useState('');
   const bottomRef = useRef<HTMLDivElement>(null);
-  const jitsiContainerRef = useRef<HTMLDivElement>(null);
-  const jitsiApiRef = useRef<JitsiAPI | null>(null);
   const chatChannelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
   const presenceChannelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
 
   const [currentUser, setCurrentUser] = useState<{ id: string; name: string } | null>(null);
   const myPresenceId = useRef(`u_${Math.random().toString(36).slice(2, 10)}`);
   const displayNameRef = useRef('にんげんさん');
+
+  function addSystemItem(body: string) {
+    const item: ChatItem = {
+      itemType: 'system',
+      id: `sys_${Date.now()}_${Math.random()}`,
+      body,
+      created_at: new Date().toISOString(),
+    };
+    setChatItems((prev) => [...prev, item]);
+  }
 
   // Get current user
   useEffect(() => {
@@ -101,7 +109,9 @@ export default function KobeyaRoom({ room, onLeave }: KobeyaRoomProps) {
       .order('created_at', { ascending: true })
       .limit(100)
       .then(({ data }) => {
-        if (data) setMessages(data as Message[]);
+        if (data) {
+          setChatItems((data as Message[]).map((m) => ({ ...m, itemType: 'message' as const })));
+        }
         setLoadingMsgs(false);
       });
   }, [room.id]);
@@ -112,9 +122,9 @@ export default function KobeyaRoom({ room, onLeave }: KobeyaRoomProps) {
       config: { broadcast: { self: false } },
     })
       .on('broadcast', { event: 'new_message' }, ({ payload }) => {
-        setMessages((prev) => {
-          if (prev.some((m) => m.id === payload.id)) return prev;
-          return [...prev, payload as Message];
+        setChatItems((prev) => {
+          if (prev.some((m) => m.itemType === 'message' && m.id === payload.id)) return prev;
+          return [...prev, { ...payload, itemType: 'message' as const }];
         });
       })
       .subscribe();
@@ -137,6 +147,7 @@ export default function KobeyaRoom({ room, onLeave }: KobeyaRoomProps) {
           if (prev.some((u) => u.id === payload.id)) return prev;
           return [...prev, { id: payload.id, name: payload.name }];
         });
+        addSystemItem(`${payload.name} が入室しました`);
         ch.send({ type: 'broadcast', event: 'user_here',
           payload: { id: myId, name: displayNameRef.current } });
       })
@@ -147,13 +158,19 @@ export default function KobeyaRoom({ room, onLeave }: KobeyaRoomProps) {
         });
       })
       .on('broadcast', { event: 'user_leave' }, ({ payload }) => {
-        setActiveUsers((prev) => prev.filter((u) => u.id !== payload.id));
+        setActiveUsers((prev) => {
+          const user = prev.find((u) => u.id === payload.id);
+          if (user) addSystemItem(`${user.name} が退出しました`);
+          return prev.filter((u) => u.id !== payload.id);
+        });
       })
       .subscribe((status) => {
         if (status !== 'SUBSCRIBED') return;
-        setActiveUsers([{ id: myId, name: displayNameRef.current }]);
+        const name = displayNameRef.current;
+        setActiveUsers([{ id: myId, name }]);
+        addSystemItem(`${name} が入室しました`);
         ch.send({ type: 'broadcast', event: 'user_join',
-          payload: { id: myId, name: displayNameRef.current } });
+          payload: { id: myId, name } });
       });
     presenceChannelRef.current = ch;
     return () => {
@@ -174,66 +191,10 @@ export default function KobeyaRoom({ room, onLeave }: KobeyaRoomProps) {
       payload: { id: myId, name: currentUser.name } });
   }, [currentUser]);
 
-  // Initialize Jitsi via External API when voice activates
-  useEffect(() => {
-    if (!voiceActive || !voiceUserName) return;
-
-    let disposed = false;
-
-    const init = () => {
-      if (disposed || !window.JitsiMeetExternalAPI || !jitsiContainerRef.current || jitsiApiRef.current) return;
-
-      const api = new window.JitsiMeetExternalAPI('meet.jit.si', {
-        roomName: `ibasho-kobeya-${room.id}`,
-        parentNode: jitsiContainerRef.current,
-        width: '100%',
-        height: 220,
-        configOverwrite: {
-          prejoinPageEnabled: false,
-          startWithVideoMuted: true,
-          startWithAudioMuted: false,
-          startAudioOnly: true,
-          disableVideo: true,
-          toolbarButtons: ['microphone', 'hangup'],
-          defaultLanguage: 'ja',
-          disableDeepLinking: true,
-          hideConferenceSubject: true,
-          hideConferenceTimer: true,
-          disableInviteFunctions: true,
-          doNotStoreRoom: true,
-        },
-        interfaceConfigOverwrite: {
-          TOOLBAR_BUTTONS: ['microphone', 'hangup'],
-          SHOW_JITSI_WATERMARK: false,
-          SHOW_WATERMARK_FOR_GUESTS: false,
-          SHOW_BRAND_WATERMARK: false,
-          MOBILE_APP_PROMO: false,
-          SHOW_CHROME_EXTENSION_BANNER: false,
-          DISABLE_JOIN_LEAVE_NOTIFICATIONS: false,
-          DEFAULT_REMOTE_DISPLAY_NAME: 'ゲスト',
-        },
-        userInfo: { displayName: voiceUserName },
-      });
-
-      jitsiApiRef.current = api;
-      api.on('videoConferenceLeft', () => setVoiceActive(false));
-      api.on('readyToClose', () => setVoiceActive(false));
-    };
-
-    loadJitsiScript(init);
-
-    return () => {
-      disposed = true;
-      jitsiApiRef.current?.dispose();
-      jitsiApiRef.current = null;
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [voiceActive, voiceUserName, room.id]);
-
   // Auto scroll
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages]);
+  }, [chatItems]);
 
   const handlePost = async () => {
     const text = input.trim();
@@ -242,28 +203,26 @@ export default function KobeyaRoom({ room, onLeave }: KobeyaRoomProps) {
     const name = currentUser?.name ?? 'にんげんさん';
 
     const tempId = -Date.now();
-    const optimistic: Message = { id: tempId, room_id: room.id, body: text, name, created_at: new Date().toISOString() };
-    setMessages((prev) => [...prev, optimistic]);
+    const optimistic: ChatItem = {
+      itemType: 'message',
+      id: tempId,
+      room_id: room.id,
+      body: text,
+      name,
+      created_at: new Date().toISOString(),
+    };
+    setChatItems((prev) => [...prev, optimistic]);
 
     const { data } = await supabase.from('room_messages').insert({ room_id: room.id, body: text, name }).select().single();
     if (data) {
-      setMessages((prev) => prev.map((m) => m.id === tempId ? (data as Message) : m));
+      setChatItems((prev) => prev.map((m) =>
+        m.itemType === 'message' && m.id === tempId ? { ...data as Message, itemType: 'message' as const } : m
+      ));
       chatChannelRef.current?.send({ type: 'broadcast', event: 'new_message', payload: data });
     }
   };
 
-  const joinVoice = () => {
-    if (!currentUser) return;
-    setVoiceUserName(currentUser.name);
-    setVoiceActive(true);
-  };
-
-  const leaveVoice = () => {
-    jitsiApiRef.current?.dispose();
-    jitsiApiRef.current = null;
-    setVoiceActive(false);
-    setVoiceUserName('');
-  };
+  const myName = currentUser?.name ?? 'にんげんさん';
 
   return (
     <div className="max-w-2xl mx-auto flex flex-col" style={{ minHeight: "calc(100vh - 120px)" }}>
@@ -311,76 +270,71 @@ export default function KobeyaRoom({ room, onLeave }: KobeyaRoomProps) {
           </div>
         )}
 
-        {/* Voice chat */}
+        {/* Voice chat - coming soon */}
         <div className="mt-3 pt-3 border-t border-gray-100">
-          {!voiceActive ? (
-            <div className="flex items-center gap-2">
-              <button
-                onClick={joinVoice}
-                disabled={!currentUser}
-                className="flex items-center gap-1.5 px-3 py-1.5 bg-violet-600 hover:bg-violet-700 disabled:opacity-40 disabled:cursor-not-allowed text-white text-[12px] font-semibold rounded-lg transition-colors"
-              >
-                🎤 ボイス参加
-              </button>
-              {!currentUser && (
-                <span className="text-[11px] text-gray-400">※ ログインが必要です</span>
-              )}
-            </div>
-          ) : (
-            <div>
-              <div className="flex items-center justify-between mb-2">
-                <span className="flex items-center gap-1.5 text-[12px] font-semibold text-violet-700">
-                  <span className="inline-block w-2 h-2 rounded-full bg-red-500 animate-pulse" />
-                  音声通話中
-                </span>
-                <button
-                  onClick={leaveVoice}
-                  className="text-[11px] text-gray-400 hover:text-red-500 transition-colors border border-gray-200 hover:border-red-200 px-2 py-0.5 rounded-md"
-                >
-                  退出
-                </button>
-              </div>
-              {/* Jitsi External API mounts here */}
-              <div
-                ref={jitsiContainerRef}
-                className="rounded-xl overflow-hidden border border-violet-100"
-                style={{ height: '220px' }}
-              />
-              <p className="text-[10px] text-gray-400 mt-1.5 text-center">
-                🎙️ マイクボタンでミュート切替　📞 電話ボタンで退出
-              </p>
-            </div>
-          )}
+          <div className="flex items-center gap-2">
+            <span className="flex items-center gap-1.5 text-[12px] text-gray-400">
+              🎤 ボイスチャット
+            </span>
+            <span className="text-[10px] px-2 py-0.5 bg-amber-50 text-amber-600 border border-amber-200 rounded-full font-medium">近日公開</span>
+          </div>
         </div>
       </div>
 
       {/* Messages */}
       <div className="flex-1 space-y-2 mb-4 overflow-y-auto" style={{ maxHeight: 'calc(100vh - 420px)' }}>
         {loadingMsgs && <div className="text-center py-8 text-gray-400 text-sm">読み込み中...</div>}
-        {!loadingMsgs && messages.length === 0 && (
+        {!loadingMsgs && chatItems.length === 0 && (
           <div className="text-center py-16 text-gray-400 text-sm">
             まだ誰も話していません。最初に話しかけてみませんか？
           </div>
         )}
-        {messages.map((msg) => {
-          const isMe = msg.name === (currentUser?.name ?? 'にんげんさん');
-          return (
-            <div key={msg.id} className={`flex gap-2.5 ${isMe ? "flex-row-reverse" : ""}`}>
-              <div className={`shrink-0 w-7 h-7 rounded-full flex items-center justify-center text-[11px] font-bold ${
-                isMe ? "bg-teal-100 text-teal-600" : "bg-gray-100 text-gray-500"
-              }`}>
-                {msg.name[0]}
+
+        {chatItems.map((item, index) => {
+          const showTs = shouldShowTimestamp(chatItems, index);
+
+          if (item.itemType === 'system') {
+            return (
+              <div key={item.id}>
+                {showTs && (
+                  <div className="text-center py-2">
+                    <span className="text-[10px] text-gray-400">{dateTimeLabel(item.created_at)}</span>
+                  </div>
+                )}
+                <div className="flex justify-center my-1">
+                  <span className="text-[11px] text-gray-400 bg-gray-100 px-3 py-1 rounded-full">
+                    {item.body}
+                  </span>
+                </div>
               </div>
-              <div className={`max-w-[78%] ${isMe ? "items-end" : "items-start"} flex flex-col gap-1`}>
-                <span className="text-[11px] text-gray-400 px-1">
-                  {isMe ? timeLabel(msg.created_at) : `${msg.name} · ${timeLabel(msg.created_at)}`}
-                </span>
-                <div className={`px-3.5 py-2.5 rounded-2xl text-[13px] leading-relaxed ${
-                  isMe
-                    ? "bg-teal-600 text-white rounded-tr-sm"
-                    : "bg-white border border-gray-200 text-gray-700 rounded-tl-sm shadow-sm"
+            );
+          }
+
+          const isMe = item.name === myName;
+          return (
+            <div key={item.id}>
+              {showTs && (
+                <div className="text-center py-2">
+                  <span className="text-[10px] text-gray-400">{dateTimeLabel(item.created_at)}</span>
+                </div>
+              )}
+              <div className={`flex gap-2.5 ${isMe ? "flex-row-reverse" : ""}`}>
+                <div className={`shrink-0 w-7 h-7 rounded-full flex items-center justify-center text-[11px] font-bold ${
+                  isMe ? "bg-teal-100 text-teal-600" : "bg-gray-100 text-gray-500"
                 }`}>
-                  {msg.body}
+                  {item.name[0]}
+                </div>
+                <div className={`max-w-[78%] ${isMe ? "items-end" : "items-start"} flex flex-col gap-1`}>
+                  <span className="text-[11px] text-gray-400 px-1">
+                    {isMe ? timeLabel(item.created_at) : `${item.name} · ${timeLabel(item.created_at)}`}
+                  </span>
+                  <div className={`px-3.5 py-2.5 rounded-2xl text-[13px] leading-relaxed ${
+                    isMe
+                      ? "bg-teal-600 text-white rounded-tr-sm"
+                      : "bg-white border border-gray-200 text-gray-700 rounded-tl-sm shadow-sm"
+                  }`}>
+                    {item.body}
+                  </div>
                 </div>
               </div>
             </div>

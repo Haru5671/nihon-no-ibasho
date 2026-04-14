@@ -20,25 +20,30 @@ interface Post {
   liked?: boolean;
 }
 
+const NICKNAME_KEY = "ibasho_nickname";
+
 export default function Hiroba({ defaultTopic, searchQuery = "" }: { defaultTopic?: Topic; searchQuery?: string }) {
   const [posts, setPosts] = useState<Post[]>([]);
-  const [input, setInput] = useState("");
   const [selectedTopic, setSelectedTopic] = useState<Topic | "すべて">(defaultTopic ?? "すべて");
-  const [postTopic, setPostTopic] = useState<Topic>("なんでも");
-  const [newPostIds, setNewPostIds] = useState<Set<string>>(new Set());
+  const [newPostIds] = useState<Set<string>>(new Set());
   const [loading, setLoading] = useState(true);
-  const [postError, setPostError] = useState<string | null>(null);
-  const [focused, setFocused] = useState(false);
   const [replyOpenId, setReplyOpenId] = useState<string | null>(null);
   const [replyInputs, setReplyInputs] = useState<Record<string, string>>({});
   const [replySubmitting, setReplySubmitting] = useState<string | null>(null);
+  const [replyNickname, setReplyNickname] = useState("");
+
+  useEffect(() => {
+    const saved = typeof window !== "undefined" ? localStorage.getItem(NICKNAME_KEY) ?? "" : "";
+    setReplyNickname(saved);
+  }, []);
 
   useEffect(() => {
     if (defaultTopic) setSelectedTopic(defaultTopic);
+    else setSelectedTopic("すべて");
   }, [defaultTopic]);
 
   useEffect(() => {
-    fetch('/api/posts')
+    fetch("/api/posts")
       .then((r) => r.json())
       .then((data) => {
         if (Array.isArray(data)) setPosts(data.map((p: Post) => ({ ...p, liked: false })));
@@ -46,56 +51,25 @@ export default function Hiroba({ defaultTopic, searchQuery = "" }: { defaultTopi
       .finally(() => setLoading(false));
   }, []);
 
-  const handlePost = async () => {
-    const text = input.trim();
-    if (!text) return;
-    setPostError(null);
-    const res = await fetch('/api/posts', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ body: text, topic: postTopic }),
-    });
-    if (!res.ok) {
-      const json = await res.json().catch(() => ({}));
-      setPostError(json.error ?? '投稿に失敗しました。');
-      return;
-    }
-    const newPost: Post = await res.json();
-    newPost.liked = false;
-    newPost.replies = [{ count: 0 }];
-    setPosts((prev) => [newPost, ...prev]);
-    setNewPostIds((prev) => new Set(prev).add(newPost.id));
-    setInput("");
-    setFocused(false);
-  };
-
-  useEffect(() => {
-    if (newPostIds.size === 0) return;
-    const timer = setTimeout(() => setNewPostIds(new Set()), 600);
-    return () => clearTimeout(timer);
-  }, [newPostIds]);
-
   const toggleLike = async (id: string, e: React.MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
     const post = posts.find((p) => p.id === id);
     if (!post) return;
-    if (!post.liked) {
-      fetch(`/api/posts/${id}/like`, { method: 'POST' });
-    }
+    if (!post.liked) fetch(`/api/posts/${id}/like`, { method: "POST" });
     setPosts(posts.map((p) =>
       p.id === id ? { ...p, liked: !p.liked, likes: p.liked ? p.likes - 1 : p.likes + 1 } : p
     ));
   };
 
   const submitReply = async (postId: string) => {
-    const text = (replyInputs[postId] ?? '').trim();
+    const text = (replyInputs[postId] ?? "").trim();
     if (!text) return;
     setReplySubmitting(postId);
     const res = await fetch(`/api/posts/${postId}/replies`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ body: text }),
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ body: text, name: replyNickname.trim() || "にんげんさん" }),
     });
     if (res.ok) {
       setPosts(posts.map((p) =>
@@ -103,14 +77,13 @@ export default function Hiroba({ defaultTopic, searchQuery = "" }: { defaultTopi
           ? { ...p, replies: [{ count: (p.replies?.[0]?.count ?? 0) + 1 }] }
           : p
       ));
-      setReplyInputs((prev) => ({ ...prev, [postId]: '' }));
+      setReplyInputs((prev) => ({ ...prev, [postId]: "" }));
       setReplyOpenId(null);
     }
     setReplySubmitting(null);
   };
 
   const topicFiltered = selectedTopic === "すべて" ? posts : posts.filter((p) => p.topic === selectedTopic);
-
   const filtered = searchQuery.trim()
     ? topicFiltered.filter((p) => p.body.toLowerCase().includes(searchQuery.toLowerCase()))
     : topicFiltered;
@@ -118,71 +91,22 @@ export default function Hiroba({ defaultTopic, searchQuery = "" }: { defaultTopi
   const getTopicMeta = (topic: Topic) => TOPICS.find((t) => t.id === topic) ?? TOPICS[TOPICS.length - 1];
 
   return (
-    <div>
-
-      {/* Post form */}
-      <div className={`bg-white border-2 rounded-lg mb-4 p-4 shadow-sm transition-all ${focused ? 'border-teal-400 shadow-md' : 'border-gray-200 hover:border-teal-300'}`}>
-        <div className="flex items-center gap-2 mb-3">
-          <svg className="w-4 h-4 text-teal-500 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
-          </svg>
-          <span className="text-[13px] font-bold text-gray-700">いま感じていることを話してみる</span>
-          <span className="text-[11px] text-gray-400 ml-auto">匿名・登録不要</span>
-        </div>
-
-        <div className="flex gap-1.5 flex-wrap mb-3">
-          {TOPICS.map((t) => (
-            <button
-              key={t.id}
-              onClick={() => { setPostTopic(t.id); setFocused(true); }}
-              className={`px-2 py-0.5 rounded text-[11px] font-semibold border transition-colors flex items-center gap-1 ${
-                postTopic === t.id ? `${t.color} font-bold` : "bg-white text-gray-400 border-gray-200 hover:border-gray-300"
-              }`}
-            >
-              <TopicIcon topic={t.id} size={11} />
-              {t.id}
-            </button>
-          ))}
-        </div>
-
-        <textarea
-          value={input}
-          onChange={(e) => setInput(e.target.value)}
-          onFocus={() => setFocused(true)}
-          placeholder="AIに仕事を奪われた、失業手当がわからない、クビになった、誰にも話せない気持ち…なんでも書いてみてください。"
-          className="w-full bg-gray-50 text-gray-700 placeholder-gray-400 resize-none outline-none text-[13px] leading-relaxed rounded p-2.5 border border-gray-200 focus:border-teal-300 focus:bg-white transition-colors"
-          rows={focused ? 4 : 2}
-          onKeyDown={(e) => { if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) handlePost(); }}
-        />
-        {postError && (
-          <div className="mt-2 px-2 py-1.5 rounded bg-red-50 border border-red-200 text-[11px] text-red-600">{postError}</div>
-        )}
-        <div className="flex items-center justify-between mt-3">
-          <span className="text-[11px] text-gray-400">Cmd+Enter で投稿</span>
-          <button
-            onClick={handlePost}
-            disabled={!input.trim()}
-            className="px-5 py-2 text-[13px] font-bold rounded-full bg-teal-600 hover:bg-teal-700 text-white transition-colors disabled:opacity-30 disabled:cursor-not-allowed shadow-sm"
-          >
-            投稿する
-          </button>
-        </div>
-      </div>
+    <div className="space-y-4">
 
       {/* Search result banner */}
       {searchQuery && (
-        <div className="mb-2 px-3 py-2 bg-teal-50 border border-teal-200 rounded text-[12px] text-teal-700 flex items-center justify-between">
+        <div className="px-4 py-3 bg-secondary-fixed text-on-secondary-fixed rounded-xl text-[12px] flex items-center justify-between">
           <span>「{searchQuery}」の検索結果 — {filtered.length}件</span>
-          <span className="text-teal-500 text-[10px]">絞り込み中</span>
+          <span className="text-[10px] opacity-60">絞り込み中</span>
         </div>
       )}
 
       {/* Topic filter tabs */}
-      <div className="flex overflow-x-auto mb-2 bg-white border border-gray-200 rounded" style={{ scrollbarWidth: 'none', flexWrap: 'nowrap' }}>
+      <div className="flex overflow-x-auto scrollbar-none bg-surface-container-lowest rounded-xl shadow-card" style={{ flexWrap: "nowrap" }}>
         <button
           onClick={() => setSelectedTopic("すべて")}
-          className={`shrink-0 px-3 py-2 h-9 flex items-center text-[12px] font-semibold border-r border-gray-100 transition-colors whitespace-nowrap ${
-            selectedTopic === "すべて" ? "bg-teal-600 text-white" : "text-gray-500 hover:bg-gray-50"
+          className={`shrink-0 px-4 py-2.5 h-10 flex items-center text-[12px] font-semibold transition-colors rounded-l-xl whitespace-nowrap ${
+            selectedTopic === "すべて" ? "bg-primary text-on-primary" : "text-outline hover:text-on-surface hover:bg-surface-container-low"
           }`}
         >
           すべて
@@ -191,8 +115,8 @@ export default function Hiroba({ defaultTopic, searchQuery = "" }: { defaultTopi
           <button
             key={t.id}
             onClick={() => setSelectedTopic(t.id)}
-            className={`shrink-0 px-3 py-2 h-9 flex items-center gap-1 text-[12px] font-semibold border-r border-gray-100 transition-colors whitespace-nowrap ${
-              selectedTopic === t.id ? "bg-teal-600 text-white" : "text-gray-500 hover:bg-gray-50"
+            className={`shrink-0 px-4 py-2.5 h-10 flex items-center gap-1.5 text-[12px] font-semibold transition-colors whitespace-nowrap last:rounded-r-xl ${
+              selectedTopic === t.id ? "bg-primary text-on-primary" : "text-outline hover:text-on-surface hover:bg-surface-container-low"
             }`}
           >
             <TopicIcon topic={t.id} size={12} />
@@ -202,73 +126,82 @@ export default function Hiroba({ defaultTopic, searchQuery = "" }: { defaultTopi
       </div>
 
       {/* Post list */}
-      <div className="bg-white border border-gray-200 rounded overflow-hidden">
+      <div className="space-y-3">
         {loading && (
-          <div className="text-center py-10 text-gray-400 text-[13px]">読み込み中...</div>
+          <div className="tonal-card p-12 text-center text-outline text-[14px]">読み込み中...</div>
         )}
         {!loading && filtered.length === 0 && (
-          <div className="text-center py-10 text-gray-400 text-[13px]">
-            {searchQuery ? '該当する投稿が見つかりませんでした' : 'まだ投稿がありません'}
+          <div className="tonal-card p-12 text-center text-outline text-[14px]">
+            {searchQuery ? "該当する投稿が見つかりませんでした" : "まだ投稿がありません"}
           </div>
         )}
+
         {filtered.map((post, index) => {
           const m = getTopicMeta(post.topic);
           const replyCount = post.replies?.[0]?.count ?? 0;
           const isReplyOpen = replyOpenId === post.id;
+          const isNew = newPostIds.has(post.id);
+
           return (
             <div key={post.id}>
               {index > 0 && index % 8 === 0 && (
-                <div className="border-t border-gray-100">
-                  <AdSenseUnit slot="feed-inline" className="overflow-hidden" />
-                </div>
+                <AdSenseUnit slot="feed-inline" className="overflow-hidden rounded-2xl" />
               )}
-              <div className={`border-b border-gray-100 last:border-b-0 transition-colors ${newPostIds.has(post.id) ? 'bg-teal-50' : 'hover:bg-gray-50'}`}>
-                <Link href={`/posts/${post.id}`} className="block px-4 py-3">
-                  <div className="flex items-center gap-2 mb-1.5">
-                    <span className={`text-[10px] px-1.5 py-0.5 rounded font-semibold border flex items-center gap-1 ${m.color}`}>
+
+              {/* Post card */}
+              <article className={`bg-surface-container-lowest rounded-2xl shadow-card transition-all ${isNew ? "ring-2 ring-primary-container" : "hover:shadow-card-hover"}`}>
+                <Link href={`/posts/${post.id}`} className="block px-5 pt-5 pb-3">
+                  {/* Meta row */}
+                  <div className="flex items-center gap-2 mb-3">
+                    {/* スマホ: name → topic。PC: topic → name */}
+                    <span className="sm:hidden text-[11px] font-semibold text-on-surface-variant shrink-0">{post.name}</span>
+                    <span className={`text-[10px] px-2.5 py-0.5 rounded-full font-semibold flex items-center gap-1 ${m.color}`}>
                       <TopicIcon topic={post.topic} size={10} />
                       {post.topic}
                     </span>
-                    {newPostIds.has(post.id) && (
-                      <span className="text-[10px] px-1.5 py-0.5 rounded bg-teal-100 text-teal-700 font-bold">NEW</span>
+                    <span className="hidden sm:block text-[11px] font-semibold text-on-surface-variant">{post.name}</span>
+                    {isNew && (
+                      <span className="text-[10px] px-2 py-0.5 rounded-full bg-primary-container text-on-primary-container font-bold">NEW</span>
                     )}
-                    <span className="text-[11px] text-gray-400 ml-auto">{timeAgo(post.created_at)}</span>
+                    <span className="text-[11px] text-outline ml-auto">{timeAgo(post.created_at)}</span>
                   </div>
-                  <p className="text-[13px] text-gray-800 leading-relaxed line-clamp-2">{post.body}</p>
+
+                  {/* Body — supports long text */}
+                  <p className="text-[14px] text-on-surface leading-relaxed line-clamp-5 whitespace-pre-line">{post.body}</p>
                 </Link>
 
-                {/* Action row */}
-                <div className="flex items-center gap-2 px-4 pb-2">
-                  {/* Like button — prominent */}
+                {/* Action bar */}
+                <div className="flex items-center gap-2 px-5 pb-4">
+                  {/* Like */}
                   <button
                     onClick={(e) => toggleLike(post.id, e)}
-                    className={`flex items-center gap-1.5 text-[12px] px-3 py-1 rounded-full font-semibold border transition-all ${
+                    className={`flex items-center gap-1.5 text-[12px] px-3 py-1.5 rounded-full font-semibold transition-all ${
                       post.liked
-                        ? "text-rose-500 bg-rose-50 border-rose-200 scale-105"
-                        : "text-gray-400 bg-gray-50 border-gray-200 hover:text-rose-500 hover:bg-rose-50 hover:border-rose-200"
+                        ? "bg-tertiary-fixed text-tertiary scale-105"
+                        : "bg-surface-container text-outline hover:bg-tertiary-fixed hover:text-tertiary"
                     }`}
                   >
-                    <span className="text-[14px] leading-none">{post.liked ? "♥" : "♡"}</span>
+                    <span className="text-[13px] leading-none">{post.liked ? "♥" : "♡"}</span>
                     <span>{post.likes}</span>
                   </button>
 
-                  {/* Reply button */}
+                  {/* Reply */}
                   <button
                     onClick={(e) => {
                       e.preventDefault();
                       e.stopPropagation();
                       setReplyOpenId(isReplyOpen ? null : post.id);
                     }}
-                    className={`flex items-center gap-1.5 text-[12px] px-3 py-1 rounded-full font-semibold border transition-all ${
+                    className={`flex items-center gap-1.5 text-[12px] px-3 py-1.5 rounded-full font-semibold transition-all ${
                       isReplyOpen
-                        ? "text-teal-600 bg-teal-50 border-teal-200"
-                        : "text-gray-400 bg-gray-50 border-gray-200 hover:text-teal-600 hover:bg-teal-50 hover:border-teal-200"
+                        ? "bg-primary/10 text-primary"
+                        : "bg-surface-container text-outline hover:bg-primary/10 hover:text-primary"
                     }`}
                   >
-                    <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+                    <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
                     </svg>
-                    {replyCount > 0 ? replyCount : '返信'}
+                    {replyCount > 0 ? replyCount : "返信"}
                   </button>
 
                   <div className="ml-auto flex items-center gap-1">
@@ -279,36 +212,50 @@ export default function Hiroba({ defaultTopic, searchQuery = "" }: { defaultTopi
 
                 {/* Inline reply form */}
                 {isReplyOpen && (
-                  <div className="px-4 pb-3 border-t border-gray-100 pt-3 bg-gray-50" onClick={(e) => e.stopPropagation()}>
+                  <div
+                    className="px-5 pb-4 pt-3 bg-surface-container-low rounded-b-2xl"
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    <input
+                      type="text"
+                      value={replyNickname}
+                      onChange={(e) => {
+                        setReplyNickname(e.target.value);
+                        if (typeof window !== "undefined") localStorage.setItem(NICKNAME_KEY, e.target.value);
+                      }}
+                      placeholder="ニックネーム（省略可）"
+                      maxLength={20}
+                      className="w-full bg-surface-container-lowest text-on-surface placeholder-outline outline-none text-[12px] rounded-xl px-3 py-2 mb-2"
+                    />
                     <div className="flex gap-2 items-end">
                       <textarea
-                        value={replyInputs[post.id] ?? ''}
+                        value={replyInputs[post.id] ?? ""}
                         onChange={(e) => setReplyInputs((prev) => ({ ...prev, [post.id]: e.target.value }))}
                         placeholder="返信を書く..."
-                        className="flex-1 bg-white text-gray-700 placeholder-gray-400 resize-none outline-none text-[13px] leading-relaxed rounded p-2 border border-gray-200 focus:border-teal-300 transition-colors"
+                        className="flex-1 bg-surface-container-lowest text-on-surface placeholder-outline resize-none outline-none text-[13px] leading-relaxed rounded-xl p-3 focus:ring-2 focus:ring-primary transition-all"
                         rows={2}
                         autoFocus
                         onKeyDown={(e) => {
-                          if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) submitReply(post.id);
+                          if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) submitReply(post.id);
                         }}
                       />
                       <button
                         onClick={() => submitReply(post.id)}
                         disabled={!replyInputs[post.id]?.trim() || replySubmitting === post.id}
-                        className="px-3 py-2 bg-teal-600 hover:bg-teal-700 text-white text-[12px] font-bold rounded-lg transition-colors disabled:opacity-30 shrink-0"
+                        className="px-4 py-2.5 bg-primary hover:bg-primary/90 text-on-primary text-[12px] font-bold rounded-full transition-all disabled:opacity-30 shrink-0"
                       >
-                        {replySubmitting === post.id ? '送信中' : '送信'}
+                        {replySubmitting === post.id ? "送信中" : "送信"}
                       </button>
                     </div>
-                    <div className="flex items-center justify-between mt-1.5">
-                      <span className="text-[10px] text-gray-400">Cmd+Enter で送信</span>
-                      <Link href={`/posts/${post.id}`} className="text-[10px] text-teal-500 hover:underline">
+                    <div className="flex items-center justify-between mt-2">
+                      <span className="text-[10px] text-outline">⌘+Enter で送信</span>
+                      <Link href={`/posts/${post.id}`} className="text-[10px] text-primary hover:underline">
                         全返信を見る →
                       </Link>
                     </div>
                   </div>
                 )}
-              </div>
+              </article>
             </div>
           );
         })}
