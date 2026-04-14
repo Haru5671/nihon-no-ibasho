@@ -17,15 +17,33 @@ function adminDb() {
 async function getStats() {
   const db = adminDb();
 
-  const [postsResult, repliesResult, pvResult] = await Promise.all([
-    db.from('posts').select('id, body, topic, likes, created_at, name'),
-    db.from('replies').select('id, post_id, created_at'),
-    db.from('page_views').select('id, path, ip_hash, created_at'),
+  // JST基準の「今日」を計算（UTC+9）
+  const JST = 9 * 60 * 60 * 1000;
+  const nowJST = new Date(Date.now() + JST);
+  // JSTの今日0時をUTCに変換
+  const todayJST = new Date(
+    Date.UTC(nowJST.getUTCFullYear(), nowJST.getUTCMonth(), nowJST.getUTCDate()) - JST
+  );
+  const fourteenDaysAgo = new Date(todayJST.getTime() - 13 * 24 * 60 * 60 * 1000);
+
+  const [postsResult, repliesResult, pvCountRes, pvRecentRes, pvAllHashRes] = await Promise.all([
+    // 投稿・返信は件数が少ないので多めに取得
+    db.from('posts').select('id, body, topic, likes, created_at, name').limit(5000),
+    db.from('replies').select('id, post_id, created_at').limit(5000),
+    // totalPVはカウントのみ取得（行データ不要 → 1000件上限を回避）
+    db.from('page_views').select('*', { count: 'exact', head: true }),
+    // チャート・流入元・デバイス用に直近14日分のみ取得
+    db.from('page_views')
+      .select('id, path, ip_hash, referrer, ua, created_at')
+      .gte('created_at', fourteenDaysAgo.toISOString())
+      .limit(20000),
+    // 全期間のユニークユーザー数算出用（ip_hashのみ）
+    db.from('page_views').select('ip_hash').limit(100000),
   ]);
 
   const posts = postsResult.data ?? [];
   const replies = repliesResult.data ?? [];
-  const pvRows = (pvResult.data ?? []) as { id: string; path: string; ip_hash: string; referrer: string | null; ua: string | null; created_at: string }[];
+  const pvRows = (pvRecentRes.data ?? []) as { id: string; path: string; ip_hash: string; referrer: string | null; ua: string | null; created_at: string }[];
 
   // Referrer breakdown
   const referrerCounts: Record<string, number> = {};
@@ -64,23 +82,21 @@ async function getStats() {
   const aiPosts = posts.filter((p) => p.name === AI_NAME);
   const aiPostIds = new Set(aiPosts.map((p) => p.id));
 
-  const now = new Date();
-  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-  const postsToday = posts.filter((p) => new Date(p.created_at) >= today).length;
+  const postsToday = posts.filter((p) => new Date(p.created_at) >= todayJST).length;
 
   // Human-only likes/replies
   const humanLikes = humanPosts.reduce((sum: number, p) => sum + (p.likes ?? 0), 0);
   const humanReplies = replies.filter((r) => !aiPostIds.has(r.post_id)).length;
 
-  // PV stats
-  const totalPV = pvRows.length;
-  const uniqueUsers = new Set(pvRows.map((r) => r.ip_hash)).size;
-  const pvToday = pvRows.filter((r) => new Date(r.created_at) >= today).length;
+  // PV stats（totalPVはカウントAPIから取得）
+  const totalPV = pvCountRes.count ?? 0;
+  const uniqueUsers = new Set((pvAllHashRes.data ?? []).map((r: { ip_hash: string }) => r.ip_hash)).size;
+  const pvToday = pvRows.filter((r) => new Date(r.created_at) >= todayJST).length;
   const uvToday = new Set(
-    pvRows.filter((r) => new Date(r.created_at) >= today).map((r) => r.ip_hash)
+    pvRows.filter((r) => new Date(r.created_at) >= todayJST).map((r) => r.ip_hash)
   ).size;
 
-  // Top pages
+  // Top pages（直近14日）
   const pageCounts: Record<string, number> = {};
   for (const r of pvRows) {
     pageCounts[r.path] = (pageCounts[r.path] ?? 0) + 1;
@@ -89,11 +105,13 @@ async function getStats() {
     .sort((a, b) => b[1] - a[1])
     .slice(0, 10);
 
-  // Daily stats (last 14 days)
+  // Daily stats (last 14 days, JST基準)
   const dailyStats: { label: string; posts: number; pv: number; uv: number }[] = [];
   for (let i = 13; i >= 0; i--) {
-    const d = new Date(today.getTime() - i * 24 * 60 * 60 * 1000);
+    const d = new Date(todayJST.getTime() - i * 24 * 60 * 60 * 1000);
     const next = new Date(d.getTime() + 24 * 60 * 60 * 1000);
+    // ラベルはJST日付で表示
+    const dJST = new Date(d.getTime() + JST);
     const dayPosts = posts.filter((p) => {
       const t = new Date(p.created_at);
       return t >= d && t < next;
@@ -103,7 +121,7 @@ async function getStats() {
       return t >= d && t < next;
     });
     dailyStats.push({
-      label: `${d.getMonth() + 1}/${d.getDate()}`,
+      label: `${dJST.getUTCMonth() + 1}/${dJST.getUTCDate()}`,
       posts: dayPosts,
       pv: dayPV.length,
       uv: new Set(dayPV.map((r) => r.ip_hash)).size,
