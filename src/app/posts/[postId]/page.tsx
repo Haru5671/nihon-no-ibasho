@@ -34,6 +34,31 @@ async function getPost(postId: string) {
 export default async function PostPage({ params }: { params: { postId: string } }) {
   const post = await getPost(params.postId);
 
+  const jsonLd = post
+    ? {
+        '@context': 'https://schema.org',
+        '@type': 'DiscussionForumPosting',
+        headline: post.body.length > 60 ? post.body.slice(0, 60) + '…' : post.body,
+        articleBody: post.body,
+        datePublished: post.created_at,
+        author: { '@type': 'Person', name: post.name },
+        interactionStatistic: [
+          {
+            '@type': 'InteractionCounter',
+            interactionType: 'https://schema.org/LikeAction',
+            userInteractionCount: post.likes ?? 0,
+          },
+        ],
+        url: `https://ibasho.co.jp/posts/${params.postId}`,
+        inLanguage: 'ja',
+        isPartOf: {
+          '@type': 'WebSite',
+          name: 'にほんのいばしょ',
+          url: 'https://ibasho.co.jp',
+        },
+      }
+    : null;
+
   if (!post) {
     return (
       <>
@@ -48,6 +73,12 @@ export default async function PostPage({ params }: { params: { postId: string } 
 
   return (
     <>
+      {jsonLd && (
+        <script
+          type="application/ld+json"
+          dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
+        />
+      )}
       <Header />
       <main className="bg-[#f8fafb] min-h-screen pt-20 pb-12 px-4">
         <div className="max-w-2xl mx-auto">
