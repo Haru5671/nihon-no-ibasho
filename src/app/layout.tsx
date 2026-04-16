@@ -32,6 +32,9 @@ export const metadata: Metadata = {
   alternates: {
     canonical: "https://ibasho.co.jp",
   },
+  verification: {
+    google: "aGpucmv5u8XE0N7snWEHppSOnau_FXc2dTTexfdx7ZI",
+  },
 };
 
 const jsonLd = {
