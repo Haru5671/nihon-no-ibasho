@@ -41,7 +41,7 @@ export default async function PostPage({ params }: { params: { postId: string } 
         headline: post.body.length > 60 ? post.body.slice(0, 60) + '…' : post.body,
         articleBody: post.body,
         datePublished: post.created_at,
-        author: { '@type': 'Person', name: post.name },
+        author: { '@type': 'Person', name: post.name, url: 'https://ibasho.co.jp' },
         interactionStatistic: [
           {
             '@type': 'InteractionCounter',
