@@ -5,7 +5,6 @@ import Link from "next/link";
 import { TOPICS, type Topic } from "@/data/posts";
 import ShareButtons from "@/components/ShareButtons";
 import SaveButton from "@/components/SaveButton";
-import AdSenseUnit from "@/components/AdSenseUnit";
 import TopicIcon from "@/components/TopicIcon";
 import { timeAgo } from "@/lib/utils";
 
@@ -136,7 +135,7 @@ export default function Hiroba({ defaultTopic, searchQuery = "" }: { defaultTopi
           </div>
         )}
 
-        {filtered.map((post, index) => {
+        {filtered.map((post) => {
           const m = getTopicMeta(post.topic);
           const replyCount = post.replies?.[0]?.count ?? 0;
           const isReplyOpen = replyOpenId === post.id;
@@ -144,10 +143,6 @@ export default function Hiroba({ defaultTopic, searchQuery = "" }: { defaultTopi
 
           return (
             <div key={post.id}>
-              {index > 0 && index % 8 === 0 && (
-                <AdSenseUnit slot="feed-inline" className="overflow-hidden rounded-2xl" />
-              )}
-
               {/* Post card */}
               <article className={`bg-surface-container-lowest rounded-2xl shadow-card transition-all ${isNew ? "ring-2 ring-primary-container" : "hover:shadow-card-hover"}`}>
                 <Link href={`/posts/${post.id}`} className="block px-5 pt-5 pb-3">

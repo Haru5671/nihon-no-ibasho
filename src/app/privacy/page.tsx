@@ -72,8 +72,8 @@ export default function PrivacyPage() {
             </section>
 
             <section>
-              <h2 className="text-base font-bold text-gray-900 mb-3 pb-2 border-b border-gray-100">4. 広告配信（Google AdSense）</h2>
-              <p className="mb-3">本サービスでは、Google LLC が提供する広告配信サービス「Google AdSense」を利用しています。Google AdSense は、ユーザーの本サービスおよび他サイトへの過去のアクセス情報に基づいて、最適化された広告を表示するために Cookie を使用することがあります。</p>
+              <h2 className="text-base font-bold text-gray-900 mb-3 pb-2 border-b border-gray-100">4. 広告配信</h2>
+              <p className="mb-3">現在、本サービスは広告を配信していません。将来、Google LLC が提供する広告配信サービス「Google AdSense」等の第三者広告サービスを利用することがあります。その場合、ユーザーの本サービスおよび他サイトへの過去のアクセス情報に基づいて、最適化された広告を表示するために Cookie を使用することがあります。</p>
               <ul className="list-disc list-inside space-y-1 text-gray-600 ml-2">
                 <li>
                   Google によるデータ利用について：

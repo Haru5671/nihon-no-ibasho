@@ -1,7 +1,6 @@
 import Link from "next/link";
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
-import AdSenseUnit from "@/components/AdSenseUnit";
 import ThreadClient from "./ThreadClient";
 
 export const dynamic = 'force-dynamic';
@@ -112,9 +111,6 @@ export default async function PostPage({ params }: { params: { postId: string } 
 
           {/* Replies + reply form (client component) */}
           <ThreadClient postId={params.postId} body={post.body} />
-
-          {/* AdSense ad below reply button area */}
-          <AdSenseUnit className="mt-4" />
         </div>
       </main>
       <Footer />

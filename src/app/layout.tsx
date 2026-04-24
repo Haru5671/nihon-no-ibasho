@@ -1,5 +1,4 @@
 import type { Metadata } from "next";
-import Script from "next/script";
 import { Analytics } from "@vercel/analytics/next";
 import PageTracker from "@/components/PageTracker";
 import "./globals.css";
@@ -120,14 +119,6 @@ export default function RootLayout({
         <PageTracker />
         {children}
         <Analytics />
-        {process.env.NEXT_PUBLIC_ADSENSE_PUB_ID && (
-          <Script
-            async
-            src={`https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-${process.env.NEXT_PUBLIC_ADSENSE_PUB_ID}`}
-            crossOrigin="anonymous"
-            strategy="afterInteractive"
-          />
-        )}
       </body>
     </html>
   );

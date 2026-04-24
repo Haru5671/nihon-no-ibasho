@@ -11,7 +11,6 @@ import WeatherWidget from "./WeatherWidget";
 import NewsWidget from "./NewsWidget";
 import BaseballWidget from "./BaseballWidget";
 import TrendingWidget from "./TrendingWidget";
-import AdSenseUnit from "./AdSenseUnit";
 
 const tabs = [
   { id: "hiroba", label: "広場", desc: "みんなの声" },
@@ -108,9 +107,6 @@ export default function AppTabs({ initialTopic, onTopicSelect, onTopicClear, sea
           {/* Weather + Baseball side by side */}
           <WeatherWidget />
           <BaseballWidget />
-
-          {/* Ad */}
-          <AdSenseUnit className="overflow-hidden rounded-2xl" />
 
           {/* Topic filter */}
           <div className="bg-surface-container-lowest rounded-2xl shadow-card overflow-hidden">
