@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { createClient as createServerClient } from '@/lib/supabase/server';
 import { createClient } from '@supabase/supabase-js';
 import { checkModeration } from '@/lib/moderate';
+import { pingIndexNow } from '@/lib/indexnow';
 
 function anonDb() {
   return createClient(
@@ -51,5 +52,9 @@ export async function POST(req: Request) {
     .single();
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+
+  // 新規投稿をBing/Yandexへ即時通知（fire-and-forget）
+  pingIndexNow([`https://ibasho.co.jp/posts/${data.id}`, 'https://ibasho.co.jp/']);
+
   return NextResponse.json(data, { status: 201 });
 }
