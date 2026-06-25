@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { SOUDAN_NAV } from "@/data/soudan";
 
 export default function Footer() {
   return (
@@ -24,12 +25,24 @@ export default function Footer() {
           </div>
         </div>
 
+        {/* 悩み別の相談（内部リンク） */}
+        <nav aria-label="悩み別の相談" className="border-t border-outline-variant/20 pt-6 mb-2">
+          <p className="text-xs font-bold text-on-surface mb-3">悩み別に相談する</p>
+          <ul className="flex flex-wrap gap-x-5 gap-y-2 text-[13px] text-on-surface-variant">
+            {SOUDAN_NAV.map((n) => (
+              <li key={n.slug}>
+                <Link href={`/soudan/${n.slug}`} className="hover:text-primary transition-colors">{n.label}</Link>
+              </li>
+            ))}
+          </ul>
+        </nav>
+
         {/* SEO keyword line */}
         <div className="border-t border-outline-variant/20 pt-6">
-          <p className="text-[11px] text-outline leading-relaxed mb-3">
+          <p className="text-xs text-on-surface-variant leading-relaxed mb-3">
             AI失業・AIに仕事を奪われた・AIのせいで失業・AI嫌い・失業手当・再就職・有休消化・クビ・失業どうすれば・相談できない——同じ気持ちの人が集まる匿名コミュニティ
           </p>
-          <p className="text-[11px] text-outline/60 text-center">
+          <p className="text-xs text-on-surface-variant text-center">
             &copy; {new Date().getFullYear()} にほんのいばしょ. All rights reserved.
           </p>
         </div>

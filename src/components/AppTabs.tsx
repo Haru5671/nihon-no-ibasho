@@ -6,6 +6,7 @@ import Kobeya from "./Kobeya";
 import KobeyaRoom, { type Room } from "./KobeyaRoom";
 import type { Topic } from "@/data/posts";
 import { TOPICS } from "@/data/posts";
+import type { DbPost } from "@/lib/posts";
 import TopicIcon from "./TopicIcon";
 import WeatherWidget from "./WeatherWidget";
 import NewsWidget from "./NewsWidget";
@@ -21,12 +22,13 @@ type TabId = (typeof tabs)[number]["id"];
 
 interface AppTabsProps {
   initialTopic?: Topic;
+  initialPosts?: DbPost[];
   onTopicSelect?: (topic: Topic) => void;
   onTopicClear?: () => void;
   searchQuery?: string;
 }
 
-export default function AppTabs({ initialTopic, onTopicSelect, onTopicClear, searchQuery = "" }: AppTabsProps) {
+export default function AppTabs({ initialTopic, initialPosts, onTopicSelect, onTopicClear, searchQuery = "" }: AppTabsProps) {
   const [active, setActive] = useState<TabId>("hiroba");
   const [hirohaTopic, setHirohaTopic] = useState<Topic | undefined>(initialTopic);
   const [activeRoom, setActiveRoom] = useState<Room | null>(null);
@@ -73,7 +75,7 @@ export default function AppTabs({ initialTopic, onTopicSelect, onTopicClear, sea
               </button>
             ))}
           </div>
-          <span className="text-[11px] text-outline hidden sm:block">悪口禁止・匿名</span>
+          <span className="text-xs text-on-surface-variant hidden sm:block">悪口禁止・匿名</span>
         </div>
       </div>
 
@@ -91,7 +93,7 @@ export default function AppTabs({ initialTopic, onTopicSelect, onTopicClear, sea
             </div>
           </div>
 
-          {active === "hiroba" && <Hiroba defaultTopic={hirohaTopic} searchQuery={searchQuery} />}
+          {active === "hiroba" && <Hiroba defaultTopic={hirohaTopic} searchQuery={searchQuery} initialPosts={initialPosts} />}
           {active === "kobeya" && !activeRoom && <Kobeya onEnterRoom={handleEnterRoom} />}
           {active === "kobeya" && activeRoom && (
             <KobeyaRoom room={activeRoom} onLeave={handleLeaveRoom} />

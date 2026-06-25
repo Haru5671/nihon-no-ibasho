@@ -42,13 +42,13 @@ export default function ThreadClient({ postId, body }: ThreadClientProps) {
     if (!text) return;
     setReplyError(null);
     const res = await fetch(`/api/posts/${postId}/replies`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ body: text, name: nickname.trim() || "にんげんさん" }),
     });
     if (!res.ok) {
       const json = await res.json().catch(() => ({}));
-      setReplyError(json.error ?? '返信に失敗しました。');
+      setReplyError(json.error ?? "返信に失敗しました。");
       return;
     }
     const newReply: Reply = await res.json();
@@ -59,39 +59,41 @@ export default function ThreadClient({ postId, body }: ThreadClientProps) {
   return (
     <>
       {/* Share */}
-      <div className="flex items-center justify-between mb-6 pb-4 border-b border-gray-100">
-        <ShareButtons postId={Number(postId)} body={body} />
+      <div className="flex items-center justify-between mb-6 pb-4 border-b border-outline-variant/30">
+        <ShareButtons postId={postId} body={body} />
       </div>
 
       {/* Replies */}
       {!loading && replies.length > 0 && (
         <div className="mb-6">
-          <h3 className="text-[12px] font-semibold text-gray-400 mb-3 uppercase tracking-wide">
+          <h2 className="text-xs font-bold text-on-surface-variant mb-3 uppercase tracking-wide">
             返信 {replies.length}件
-          </h3>
+          </h2>
           <div className="space-y-3">
             {replies.map((reply) => (
-              <div key={reply.id} className="bg-white rounded-xl p-4 border border-gray-200 ml-4 border-l-2 border-l-teal-300">
+              <div key={reply.id} className="bg-surface-container-lowest rounded-2xl p-4 shadow-card ml-4 border-l-2 border-l-primary/40">
                 <div className="flex items-center gap-2 mb-2">
-                  <div className="w-6 h-6 rounded-full bg-gray-100 flex items-center justify-center text-gray-500 text-[10px] font-bold shrink-0">
-                    {reply.name[0]}
+                  <div className="w-7 h-7 rounded-full bg-primary/10 flex items-center justify-center text-primary text-xs font-bold shrink-0">
+                    {reply.name?.[0] ?? "に"}
                   </div>
-                  <span className="text-[12px] text-gray-600 font-semibold">{reply.name}</span>
-                  <span className="text-[10px] text-gray-400">{timeAgo(reply.created_at)}</span>
+                  <span className="text-sm text-on-surface font-semibold">{reply.name}</span>
+                  <span className="text-xs text-on-surface-variant">{timeAgo(reply.created_at)}</span>
                 </div>
-                <p className="text-gray-600 text-[13px] leading-relaxed ml-8">{reply.body}</p>
+                <p className="text-on-surface text-[15px] leading-loose ml-9">{reply.body}</p>
               </div>
             ))}
           </div>
         </div>
       )}
       {loading && (
-        <div className="text-center py-8 text-gray-400 text-sm mb-6">読み込み中...</div>
+        <div className="text-center py-8 text-on-surface-variant text-sm mb-6">読み込み中...</div>
       )}
 
       {/* Reply form */}
-      <div className="bg-white rounded-2xl p-4 border border-gray-200 shadow-sm">
+      <div className="bg-surface-container-lowest rounded-2xl p-4 sm:p-5 shadow-card">
+        <label htmlFor="reply-nickname" className="sr-only">ニックネーム</label>
         <input
+          id="reply-nickname"
           type="text"
           value={nickname}
           onChange={(e) => {
@@ -100,27 +102,29 @@ export default function ThreadClient({ postId, body }: ThreadClientProps) {
           }}
           placeholder="ニックネーム（省略可 → にんげんさん）"
           maxLength={20}
-          className="w-full bg-gray-50 text-gray-700 placeholder-gray-300 outline-none text-[12px] rounded-lg px-3 py-2 mb-3"
+          className="w-full bg-surface-container text-on-surface placeholder-outline outline-none text-sm rounded-xl px-3 py-2.5 mb-3 focus-visible:ring-2 focus-visible:ring-primary transition-all"
         />
+        <label htmlFor="reply-body" className="sr-only">返信内容</label>
         <textarea
+          id="reply-body"
           value={replyInput}
           onChange={(e) => setReplyInput(e.target.value)}
           placeholder="返信を書く..."
-          className="w-full bg-transparent text-gray-700 placeholder-gray-300 resize-none outline-none text-[13px] leading-relaxed"
+          className="w-full bg-surface-container text-on-surface placeholder-outline resize-y outline-none text-[15px] leading-loose rounded-xl p-3 focus-visible:ring-2 focus-visible:ring-primary transition-all"
           rows={3}
           onKeyDown={(e) => { if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) handleReply(); }}
         />
         {replyError && (
-          <div className="mt-2 px-3 py-2 rounded-lg bg-red-50 border border-red-200 text-[12px] text-red-600">
+          <div role="alert" className="mt-2 px-3 py-2 rounded-lg bg-error-container text-on-error-container text-sm">
             {replyError}
           </div>
         )}
-        <div className="flex items-center justify-between mt-3 pt-3 border-t border-gray-100">
-          <span className="text-[11px] text-gray-400">⌘+Enter で送信</span>
+        <div className="flex items-center justify-between mt-3 pt-3 border-t border-outline-variant/30">
+          <span className="text-xs text-on-surface-variant">⌘+Enter で送信</span>
           <button
             onClick={handleReply}
             disabled={!replyInput.trim()}
-            className="px-4 py-1.5 text-[13px] font-semibold rounded-lg bg-gray-900 hover:bg-gray-700 text-white transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+            className="px-5 min-h-[44px] text-sm font-bold rounded-full bg-primary hover:bg-primary/90 text-on-primary transition-colors disabled:opacity-30 disabled:cursor-not-allowed focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2"
           >
             返信する
           </button>

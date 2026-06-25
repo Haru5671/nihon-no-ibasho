@@ -108,8 +108,9 @@ export default function Header({ searchQuery = "", onSearch = () => {}, onTopicS
         {/* Hamburger — mobile */}
         <button
           onClick={() => setMobileOpen(!mobileOpen)}
-          className="md:hidden w-8 h-8 flex items-center justify-center text-outline"
+          className="md:hidden w-11 h-11 -mr-2 flex items-center justify-center text-on-surface-variant"
           aria-label="メニュー"
+          aria-expanded={mobileOpen}
         >
           <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d={mobileOpen ? "M6 18L18 6M6 6l12 12" : "M4 6h16M4 12h16M4 18h16"} />

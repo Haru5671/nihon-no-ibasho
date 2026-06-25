@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import Link from "next/link";
 import { TOPICS, type Topic } from "@/data/posts";
+import type { DbPost } from "@/lib/posts";
 import ShareButtons from "@/components/ShareButtons";
 import SaveButton from "@/components/SaveButton";
 import TopicIcon from "@/components/TopicIcon";
@@ -21,11 +22,12 @@ interface Post {
 
 const NICKNAME_KEY = "ibasho_nickname";
 
-export default function Hiroba({ defaultTopic, searchQuery = "" }: { defaultTopic?: Topic; searchQuery?: string }) {
-  const [posts, setPosts] = useState<Post[]>([]);
+export default function Hiroba({ defaultTopic, searchQuery = "", initialPosts }: { defaultTopic?: Topic; searchQuery?: string; initialPosts?: DbPost[] }) {
+  const seeded: Post[] = (initialPosts ?? []).map((p) => ({ ...p, liked: false }));
+  const [posts, setPosts] = useState<Post[]>(seeded);
   const [selectedTopic, setSelectedTopic] = useState<Topic | "すべて">(defaultTopic ?? "すべて");
   const [newPostIds] = useState<Set<string>>(new Set());
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(seeded.length === 0);
   const [replyOpenId, setReplyOpenId] = useState<string | null>(null);
   const [replyInputs, setReplyInputs] = useState<Record<string, string>>({});
   const [replySubmitting, setReplySubmitting] = useState<string | null>(null);
@@ -104,7 +106,7 @@ export default function Hiroba({ defaultTopic, searchQuery = "" }: { defaultTopi
       <div className="flex overflow-x-auto scrollbar-none bg-surface-container-lowest rounded-xl shadow-card" style={{ flexWrap: "nowrap" }}>
         <button
           onClick={() => setSelectedTopic("すべて")}
-          className={`shrink-0 px-4 py-2.5 h-10 flex items-center text-[12px] font-semibold transition-colors rounded-l-xl whitespace-nowrap ${
+          className={`shrink-0 px-4 py-2.5 h-11 flex items-center text-[12px] font-semibold transition-colors rounded-l-xl whitespace-nowrap ${
             selectedTopic === "すべて" ? "bg-primary text-on-primary" : "text-outline hover:text-on-surface hover:bg-surface-container-low"
           }`}
         >
@@ -114,7 +116,7 @@ export default function Hiroba({ defaultTopic, searchQuery = "" }: { defaultTopi
           <button
             key={t.id}
             onClick={() => setSelectedTopic(t.id)}
-            className={`shrink-0 px-4 py-2.5 h-10 flex items-center gap-1.5 text-[12px] font-semibold transition-colors whitespace-nowrap last:rounded-r-xl ${
+            className={`shrink-0 px-4 py-2.5 h-11 flex items-center gap-1.5 text-[12px] font-semibold transition-colors whitespace-nowrap last:rounded-r-xl ${
               selectedTopic === t.id ? "bg-primary text-on-primary" : "text-outline hover:text-on-surface hover:bg-surface-container-low"
             }`}
           >
@@ -149,20 +151,20 @@ export default function Hiroba({ defaultTopic, searchQuery = "" }: { defaultTopi
                   {/* Meta row */}
                   <div className="flex items-center gap-2 mb-3">
                     {/* スマホ: name → topic。PC: topic → name */}
-                    <span className="sm:hidden text-[11px] font-semibold text-on-surface-variant shrink-0">{post.name}</span>
-                    <span className={`text-[10px] px-2.5 py-0.5 rounded-full font-semibold flex items-center gap-1 ${m.color}`}>
-                      <TopicIcon topic={post.topic} size={10} />
+                    <span className="sm:hidden text-xs font-semibold text-on-surface-variant shrink-0">{post.name}</span>
+                    <span className={`text-xs px-2.5 py-0.5 rounded-full font-semibold flex items-center gap-1 ${m.color}`}>
+                      <TopicIcon topic={post.topic} size={11} />
                       {post.topic}
                     </span>
-                    <span className="hidden sm:block text-[11px] font-semibold text-on-surface-variant">{post.name}</span>
+                    <span className="hidden sm:block text-xs font-semibold text-on-surface-variant">{post.name}</span>
                     {isNew && (
-                      <span className="text-[10px] px-2 py-0.5 rounded-full bg-primary-container text-on-primary-container font-bold">NEW</span>
+                      <span className="text-xs px-2 py-0.5 rounded-full bg-primary-container text-on-primary-container font-bold">NEW</span>
                     )}
-                    <span className="text-[11px] text-outline ml-auto">{timeAgo(post.created_at)}</span>
+                    <span className="text-xs text-on-surface-variant ml-auto">{timeAgo(post.created_at)}</span>
                   </div>
 
                   {/* Body — supports long text */}
-                  <p className="text-[14px] text-on-surface leading-relaxed line-clamp-5 whitespace-pre-line">{post.body}</p>
+                  <p className="text-[15px] text-on-surface leading-loose line-clamp-5 whitespace-pre-line">{post.body}</p>
                 </Link>
 
                 {/* Action bar */}
@@ -170,7 +172,7 @@ export default function Hiroba({ defaultTopic, searchQuery = "" }: { defaultTopi
                   {/* Like */}
                   <button
                     onClick={(e) => toggleLike(post.id, e)}
-                    className={`flex items-center gap-1.5 text-[12px] px-3 py-1.5 rounded-full font-semibold transition-all ${
+                    className={`flex items-center gap-1.5 text-sm px-3.5 py-2 min-h-[40px] rounded-full font-semibold transition-all ${
                       post.liked
                         ? "bg-tertiary-fixed text-tertiary scale-105"
                         : "bg-surface-container text-outline hover:bg-tertiary-fixed hover:text-tertiary"
@@ -187,7 +189,7 @@ export default function Hiroba({ defaultTopic, searchQuery = "" }: { defaultTopi
                       e.stopPropagation();
                       setReplyOpenId(isReplyOpen ? null : post.id);
                     }}
-                    className={`flex items-center gap-1.5 text-[12px] px-3 py-1.5 rounded-full font-semibold transition-all ${
+                    className={`flex items-center gap-1.5 text-sm px-3.5 py-2 min-h-[40px] rounded-full font-semibold transition-all ${
                       isReplyOpen
                         ? "bg-primary/10 text-primary"
                         : "bg-surface-container text-outline hover:bg-primary/10 hover:text-primary"
@@ -201,7 +203,7 @@ export default function Hiroba({ defaultTopic, searchQuery = "" }: { defaultTopi
 
                   <div className="ml-auto flex items-center gap-1">
                     <SaveButton postId={post.id} />
-                    <ShareButtons postId={Number(post.id)} body={post.body} />
+                    <ShareButtons postId={post.id} body={post.body} />
                   </div>
                 </div>
 

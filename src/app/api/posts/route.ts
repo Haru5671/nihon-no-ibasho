@@ -21,7 +21,11 @@ export async function GET() {
 }
 
 export async function POST(req: Request) {
-  const { body, topic, name } = await req.json();
+  const parsed = await req.json().catch(() => null);
+  if (!parsed) {
+    return NextResponse.json({ error: 'invalid request body' }, { status: 400 });
+  }
+  const { body, topic, name } = parsed;
   if (!body?.trim() || !topic) {
     return NextResponse.json({ error: 'body and topic are required' }, { status: 400 });
   }

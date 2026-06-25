@@ -22,7 +22,11 @@ export async function GET(_req: Request, { params }: { params: { id: string } })
 }
 
 export async function POST(req: Request, { params }: { params: { id: string } }) {
-  const { body, name } = await req.json();
+  const parsed = await req.json().catch(() => null);
+  if (!parsed) {
+    return NextResponse.json({ error: 'invalid request body' }, { status: 400 });
+  }
+  const { body, name } = parsed;
   if (!body?.trim()) {
     return NextResponse.json({ error: 'body is required' }, { status: 400 });
   }

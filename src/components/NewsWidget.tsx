@@ -33,35 +33,35 @@ export default function NewsWidget() {
   }, []);
 
   return (
-    <div className="bg-white border border-gray-200 rounded overflow-hidden">
-      <div className="px-3 py-2 bg-gray-50 border-b border-gray-200 flex items-center justify-between">
-        <span className="text-[12px] font-bold text-gray-700">関連ニュース</span>
-        <span className="text-[10px] text-teal-600 font-medium">AI失業・再就職</span>
+    <div className="bg-surface-container-lowest rounded-2xl shadow-card overflow-hidden">
+      <div className="px-5 py-4 bg-surface-container-low flex items-center justify-between">
+        <span className="text-xs font-bold text-primary font-headline">関連ニュース</span>
+        <span className="text-[11px] text-on-surface-variant font-medium">AI失業・再就職</span>
       </div>
       {loading && (
-        <div className="px-3 py-4 text-[11px] text-gray-400">読み込み中...</div>
+        <div className="px-5 py-4 text-xs text-on-surface-variant">読み込み中...</div>
       )}
       {!loading && items.length === 0 && (
-        <div className="px-3 py-4 text-[11px] text-gray-400">ニュースを取得できませんでした</div>
+        <div className="px-5 py-4 text-xs text-on-surface-variant">ニュースを取得できませんでした</div>
       )}
-      <div className="divide-y divide-gray-100">
+      <div className="divide-y divide-outline-variant/15">
         {items.map((item, i) => (
           <a
             key={i}
             href={item.link}
             target="_blank"
             rel="noopener noreferrer"
-            className="block px-3 py-2.5 hover:bg-gray-50 transition-colors group"
+            className="block px-5 py-3 hover:bg-surface-container-low transition-colors group focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-inset"
           >
-            <p className="text-[12px] text-gray-800 leading-snug line-clamp-2 group-hover:text-teal-700 mb-1">
+            <p className="text-[13px] text-on-surface leading-snug line-clamp-2 group-hover:text-primary mb-1">
               {item.title}
             </p>
             <div className="flex items-center gap-2">
               {item.source && (
-                <span className="text-[10px] text-gray-400">{item.source}</span>
+                <span className="text-[11px] text-on-surface-variant">{item.source}</span>
               )}
               {item.pubDate && (
-                <span className="text-[10px] text-gray-300">{timeAgoFromRSS(item.pubDate)}</span>
+                <span className="text-[11px] text-outline">{timeAgoFromRSS(item.pubDate)}</span>
               )}
             </div>
           </a>

@@ -59,54 +59,54 @@ export default function LoginPage() {
   return (
     <>
       <Header />
-      <main className="bg-[#f8fafb] min-h-screen pt-24 pb-12 px-4">
+      <main className="bg-surface min-h-screen pt-24 pb-12 px-4">
         <div className="max-w-sm mx-auto">
-          <h1 className="text-2xl font-bold text-gray-800 text-center mb-8">ログイン</h1>
+          <h1 className="text-2xl font-bold text-on-surface text-center mb-8">ログイン</h1>
 
           <form onSubmit={handleLogin} className="space-y-4">
             <div>
-              <label className="block text-sm text-gray-600 mb-1">メールアドレス</label>
+              <label className="block text-sm text-on-surface-variant mb-1">メールアドレス</label>
               <input
                 type="email"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 required
-                className="w-full px-4 py-2.5 border border-gray-200 rounded-lg text-sm outline-none focus:border-teal-400 transition-colors"
+                className="w-full px-4 py-2.5 border border-outline-variant rounded-lg text-sm outline-none focus-visible:ring-2 focus-visible:ring-primary transition-colors"
                 placeholder="email@example.com"
               />
             </div>
             <div>
-              <label className="block text-sm text-gray-600 mb-1">パスワード</label>
+              <label className="block text-sm text-on-surface-variant mb-1">パスワード</label>
               <input
                 type="password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 required
-                className="w-full px-4 py-2.5 border border-gray-200 rounded-lg text-sm outline-none focus:border-teal-400 transition-colors"
+                className="w-full px-4 py-2.5 border border-outline-variant rounded-lg text-sm outline-none focus-visible:ring-2 focus-visible:ring-primary transition-colors"
                 placeholder="パスワード"
               />
             </div>
 
-            {error && <p className="text-red-500 text-xs">{error}</p>}
+            {error && <p className="text-error text-xs">{error}</p>}
 
             <button
               type="submit"
               disabled={loading}
-              className="w-full py-2.5 bg-teal-500 hover:bg-teal-600 text-white rounded-lg text-sm font-medium transition-colors disabled:opacity-50"
+              className="w-full py-2.5 bg-primary hover:bg-primary text-white rounded-lg text-sm font-medium transition-colors disabled:opacity-50"
             >
               {loading ? "ログイン中..." : "ログイン"}
             </button>
           </form>
 
           <div className="my-6 flex items-center gap-3">
-            <div className="flex-1 h-px bg-gray-200" />
-            <span className="text-xs text-gray-400">または</span>
-            <div className="flex-1 h-px bg-gray-200" />
+            <div className="flex-1 h-px bg-outline-variant" />
+            <span className="text-xs text-on-surface-variant">または</span>
+            <div className="flex-1 h-px bg-outline-variant" />
           </div>
 
           <button
             onClick={handleGoogleLogin}
-            className="w-full py-2.5 border border-gray-200 rounded-lg text-sm text-gray-600 hover:bg-gray-50 transition-colors flex items-center justify-center gap-2"
+            className="w-full py-2.5 border border-outline-variant rounded-lg text-sm text-on-surface-variant hover:bg-surface-container transition-colors flex items-center justify-center gap-2"
           >
             <svg className="w-4 h-4" viewBox="0 0 24 24">
               <path
@@ -129,46 +129,46 @@ export default function LoginPage() {
             Googleでログイン
           </button>
 
-          <p className="text-center text-sm text-gray-400 mt-6">
+          <p className="text-center text-sm text-on-surface-variant mt-6">
             アカウントをお持ちでない方は{" "}
-            <Link href="/auth/signup" className="text-teal-600 hover:underline">
+            <Link href="/auth/signup" className="text-primary hover:underline">
               新規登録
             </Link>
           </p>
 
-          <div className="mt-6 pt-6 border-t border-gray-100">
+          <div className="mt-6 pt-6 border-t border-outline-variant/30">
             {!showReset && (
               <button
                 onClick={() => setShowReset(true)}
-                className="w-full text-sm text-gray-400 hover:text-teal-600 transition-colors text-center"
+                className="w-full text-sm text-on-surface-variant hover:text-primary transition-colors text-center"
               >
                 パスワードをお忘れの場合
               </button>
             )}
             {showReset && !resetSent && (
               <form onSubmit={handleResetPassword} className="space-y-3">
-                <p className="text-sm font-semibold text-gray-700">パスワード再設定メールを送信</p>
-                <p className="text-xs text-gray-400">登録済みのメールアドレスを入力してください。</p>
+                <p className="text-sm font-semibold text-on-surface">パスワード再設定メールを送信</p>
+                <p className="text-xs text-on-surface-variant">登録済みのメールアドレスを入力してください。</p>
                 <input
                   type="email"
                   value={resetEmail}
                   onChange={(e) => setResetEmail(e.target.value)}
                   placeholder="email@example.com"
                   required
-                  className="w-full px-4 py-2.5 border border-gray-200 rounded-lg text-sm outline-none focus:border-teal-400 transition-colors"
+                  className="w-full px-4 py-2.5 border border-outline-variant rounded-lg text-sm outline-none focus-visible:ring-2 focus-visible:ring-primary transition-colors"
                 />
                 <div className="flex gap-2">
                   <button
                     type="submit"
                     disabled={resetLoading}
-                    className="flex-1 py-2.5 bg-teal-500 hover:bg-teal-600 text-white rounded-lg text-sm font-medium transition-colors disabled:opacity-50"
+                    className="flex-1 py-2.5 bg-primary hover:bg-primary text-white rounded-lg text-sm font-medium transition-colors disabled:opacity-50"
                   >
                     {resetLoading ? "送信中..." : "再設定メールを送る"}
                   </button>
                   <button
                     type="button"
                     onClick={() => setShowReset(false)}
-                    className="px-4 py-2.5 border border-gray-200 text-gray-400 text-sm rounded-lg hover:bg-gray-50 transition-colors"
+                    className="px-4 py-2.5 border border-outline-variant text-on-surface-variant text-sm rounded-lg hover:bg-surface-container transition-colors"
                   >
                     キャンセル
                   </button>
@@ -176,9 +176,9 @@ export default function LoginPage() {
               </form>
             )}
             {resetSent && (
-              <div className="bg-teal-50 border border-teal-200 rounded-lg p-3 text-center">
-                <p className="text-sm font-semibold text-teal-700">✓ 再設定メールを送信しました</p>
-                <p className="text-xs text-teal-600 mt-1">メール内のリンクからパスワードを再設定してください。</p>
+              <div className="bg-primary/10 border border-primary/20 rounded-lg p-3 text-center">
+                <p className="text-sm font-semibold text-primary">✓ 再設定メールを送信しました</p>
+                <p className="text-xs text-primary mt-1">メール内のリンクからパスワードを再設定してください。</p>
               </div>
             )}
           </div>

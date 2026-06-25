@@ -10,7 +10,11 @@ export async function POST(req: Request) {
       req.headers.get('x-forwarded-for')?.split(',')[0].trim() ??
       req.headers.get('x-real-ip') ??
       'unknown';
-    const ipHash = createHash('sha256').update(ip + process.env.CRON_SECRET).digest('hex').slice(0, 16);
+    // 専用ソルトでIPをハッシュ化（autopost認可トークンの流用をやめる）。未設定なら保存しない
+    const salt = process.env.IP_HASH_SALT ?? process.env.CRON_SECRET;
+    const ipHash = salt
+      ? createHash('sha256').update(ip + salt).digest('hex').slice(0, 16)
+      : null;
 
     const db = createClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,

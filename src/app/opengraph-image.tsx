@@ -29,7 +29,7 @@ export default async function Image() {
           flexDirection: 'column',
           justifyContent: 'space-between',
           padding: '80px',
-          background: 'linear-gradient(135deg, #fdf6f0 0%, #f0ebe3 50%, #e8dcc8 100%)',
+          background: 'linear-gradient(135deg, #004a41 0%, #006b5f 55%, #0a8276 100%)',
           fontFamily: 'NotoJP, sans-serif',
         }}
       >
@@ -39,28 +39,28 @@ export default async function Image() {
               width: '48px',
               height: '48px',
               borderRadius: '50%',
-              background: '#14b8a6',
+              background: '#71f8e4',
             }}
           />
-          <div style={{ fontSize: '28px', color: '#5a5147', fontWeight: 700 }}>
+          <div style={{ fontSize: '28px', color: '#d6fff7', fontWeight: 700 }}>
             にほんのいばしょ
           </div>
         </div>
 
         <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
-          <div style={{ fontSize: '72px', fontWeight: 700, color: '#2d2a26', lineHeight: 1.2 }}>
+          <div style={{ fontSize: '72px', fontWeight: 700, color: '#ffffff', lineHeight: 1.2 }}>
             誰にも話せない悩みを、
           </div>
-          <div style={{ fontSize: '72px', fontWeight: 700, color: '#b85c3c', lineHeight: 1.2 }}>
+          <div style={{ fontSize: '72px', fontWeight: 700, color: '#71f8e4', lineHeight: 1.2 }}>
             ここで、そっと。
           </div>
         </div>
 
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end' }}>
-          <div style={{ fontSize: '24px', color: '#7a6f60' }}>
+          <div style={{ fontSize: '24px', color: '#bdeee6' }}>
             AI失業・失業手当・再就職 / 匿名・登録不要
           </div>
-          <div style={{ fontSize: '22px', color: '#9a8f80' }}>ibasho.co.jp</div>
+          <div style={{ fontSize: '22px', color: '#8fd6cb' }}>ibasho.co.jp</div>
         </div>
       </div>
     ),

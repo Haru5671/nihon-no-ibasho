@@ -54,11 +54,11 @@ export default function SignupPage() {
     return (
       <>
         <Header />
-        <main className="bg-[#f8fafb] min-h-screen pt-24 pb-12 px-4">
+        <main className="bg-surface min-h-screen pt-24 pb-12 px-4">
           <div className="max-w-sm mx-auto text-center">
-            <div className="bg-white border border-gray-200 rounded-xl p-8 shadow-sm">
-              <h2 className="text-lg font-bold text-gray-800 mb-3">確認メールを送信しました</h2>
-              <p className="text-sm text-gray-500 leading-relaxed">
+            <div className="bg-surface-container-lowest border border-outline-variant rounded-xl p-8 shadow-sm">
+              <h2 className="text-lg font-bold text-on-surface mb-3">確認メールを送信しました</h2>
+              <p className="text-sm text-on-surface-variant leading-relaxed">
                 {email} に確認メールを送信しました。メール内のリンクをクリックして登録を完了してください。
               </p>
             </div>
@@ -71,65 +71,65 @@ export default function SignupPage() {
   return (
     <>
       <Header />
-      <main className="bg-[#f8fafb] min-h-screen pt-24 pb-12 px-4">
+      <main className="bg-surface min-h-screen pt-24 pb-12 px-4">
         <div className="max-w-sm mx-auto">
-          <h1 className="text-2xl font-bold text-gray-800 text-center mb-8">新規登録</h1>
+          <h1 className="text-2xl font-bold text-on-surface text-center mb-8">新規登録</h1>
 
           <form onSubmit={handleSignup} className="space-y-4">
             <div>
-              <label className="block text-sm text-gray-600 mb-1">表示名</label>
+              <label className="block text-sm text-on-surface-variant mb-1">表示名</label>
               <input
                 type="text"
                 value={displayName}
                 onChange={(e) => setDisplayName(e.target.value)}
-                className="w-full px-4 py-2.5 border border-gray-200 rounded-lg text-sm outline-none focus:border-teal-400 transition-colors"
+                className="w-full px-4 py-2.5 border border-outline-variant rounded-lg text-sm outline-none focus-visible:ring-2 focus-visible:ring-primary transition-colors"
                 placeholder="にんげんさん"
               />
             </div>
             <div>
-              <label className="block text-sm text-gray-600 mb-1">メールアドレス</label>
+              <label className="block text-sm text-on-surface-variant mb-1">メールアドレス</label>
               <input
                 type="email"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 required
-                className="w-full px-4 py-2.5 border border-gray-200 rounded-lg text-sm outline-none focus:border-teal-400 transition-colors"
+                className="w-full px-4 py-2.5 border border-outline-variant rounded-lg text-sm outline-none focus-visible:ring-2 focus-visible:ring-primary transition-colors"
                 placeholder="email@example.com"
               />
             </div>
             <div>
-              <label className="block text-sm text-gray-600 mb-1">パスワード</label>
+              <label className="block text-sm text-on-surface-variant mb-1">パスワード</label>
               <input
                 type="password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 required
                 minLength={6}
-                className="w-full px-4 py-2.5 border border-gray-200 rounded-lg text-sm outline-none focus:border-teal-400 transition-colors"
+                className="w-full px-4 py-2.5 border border-outline-variant rounded-lg text-sm outline-none focus-visible:ring-2 focus-visible:ring-primary transition-colors"
                 placeholder="6文字以上"
               />
             </div>
 
-            {error && <p className="text-red-500 text-xs">{error}</p>}
+            {error && <p className="text-error text-xs">{error}</p>}
 
             <button
               type="submit"
               disabled={loading}
-              className="w-full py-2.5 bg-teal-500 hover:bg-teal-600 text-white rounded-lg text-sm font-medium transition-colors disabled:opacity-50"
+              className="w-full py-2.5 bg-primary hover:bg-primary text-white rounded-lg text-sm font-medium transition-colors disabled:opacity-50"
             >
               {loading ? "登録中..." : "登録する"}
             </button>
           </form>
 
           <div className="my-6 flex items-center gap-3">
-            <div className="flex-1 h-px bg-gray-200" />
-            <span className="text-xs text-gray-400">または</span>
-            <div className="flex-1 h-px bg-gray-200" />
+            <div className="flex-1 h-px bg-outline-variant" />
+            <span className="text-xs text-on-surface-variant">または</span>
+            <div className="flex-1 h-px bg-outline-variant" />
           </div>
 
           <button
             onClick={handleGoogleLogin}
-            className="w-full py-2.5 border border-gray-200 rounded-lg text-sm text-gray-600 hover:bg-gray-50 transition-colors flex items-center justify-center gap-2"
+            className="w-full py-2.5 border border-outline-variant rounded-lg text-sm text-on-surface-variant hover:bg-surface-container transition-colors flex items-center justify-center gap-2"
           >
             <svg className="w-4 h-4" viewBox="0 0 24 24">
               <path
@@ -152,9 +152,9 @@ export default function SignupPage() {
             Googleで登録
           </button>
 
-          <p className="text-center text-sm text-gray-400 mt-6">
+          <p className="text-center text-sm text-on-surface-variant mt-6">
             すでにアカウントをお持ちの方は{" "}
-            <Link href="/auth/login" className="text-teal-600 hover:underline">
+            <Link href="/auth/login" className="text-primary hover:underline">
               ログイン
             </Link>
           </p>

@@ -4,6 +4,7 @@ import PageTracker from "@/components/PageTracker";
 import "./globals.css";
 
 export const metadata: Metadata = {
+  metadataBase: new URL("https://ibasho.co.jp"),
   title: "にほんのいばしょ — AI失業・失業手当・再就職の悩みを匿名で相談できる場所",
   description:
     "AIに仕事を奪われた、クビになった、失業手当の申請がわからない、再就職できない、有休消化中で不安——誰にも相談できない悩みを匿名・登録不要で話せるオンラインコミュニティです。AI嫌い・AI失業・失業どうすればと感じているあなたの居場所。",
@@ -28,9 +29,6 @@ export const metadata: Metadata = {
     description:
       "AIのせいで仕事を失った、クビになった、有休消化中で先が見えない——誰にも言えない悩みを話せる場所。",
   },
-  alternates: {
-    canonical: "https://ibasho.co.jp",
-  },
   verification: {
     google: "aGpucmv5u8XE0N7snWEHppSOnau_FXc2dTTexfdx7ZI",
   },
@@ -40,6 +38,17 @@ const jsonLd = {
   "@context": "https://schema.org",
   "@graph": [
     {
+      "@type": "Organization",
+      "@id": "https://ibasho.co.jp/#organization",
+      name: "にほんのいばしょ",
+      alternateName: ["nihon no ibasho", "ニホンノイバショ"],
+      url: "https://ibasho.co.jp",
+      logo: "https://ibasho.co.jp/opengraph-image",
+      description:
+        "AI失業・失業手当・再就職・クビなど誰にも相談できない悩みを匿名・登録不要・無料で話せる日本語のオンラインコミュニティ。",
+      knowsAbout: ["AI失業", "失業手当", "雇用保険", "再就職", "解雇", "有休消化", "孤独", "メンタルヘルス"],
+    },
+    {
       "@type": "WebSite",
       "@id": "https://ibasho.co.jp/#website",
       url: "https://ibasho.co.jp",
@@ -47,6 +56,15 @@ const jsonLd = {
       description:
         "AI失業・失業手当・再就職など誰にも相談できない悩みを話せる匿名コミュニティ",
       inLanguage: "ja",
+      publisher: { "@id": "https://ibasho.co.jp/#organization" },
+      potentialAction: {
+        "@type": "SearchAction",
+        target: {
+          "@type": "EntryPoint",
+          urlTemplate: "https://ibasho.co.jp/?q={search_term_string}",
+        },
+        "query-input": "required name=search_term_string",
+      },
     },
     {
       "@type": "FAQPage",

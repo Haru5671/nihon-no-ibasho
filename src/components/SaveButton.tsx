@@ -63,10 +63,12 @@ export default function SaveButton({ postId }: Props) {
       <button
         onClick={toggle}
         disabled={loading}
-        className={`flex items-center gap-1 text-[11px] px-2 py-0.5 rounded transition-colors ${
-          saved ? 'text-amber-500 hover:text-amber-600' : 'text-gray-300 hover:text-amber-400'
+        className={`flex items-center gap-1 text-xs px-2 py-1.5 rounded transition-colors focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-1 ${
+          saved ? 'text-primary hover:text-on-primary-container' : 'text-outline hover:text-primary'
         }`}
         title={saved ? '保存済み' : '保存する'}
+        aria-label={saved ? '保存済み' : '保存する'}
+        aria-pressed={saved}
       >
         <svg className="w-3.5 h-3.5" fill={saved ? 'currentColor' : 'none'} viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
           <path strokeLinecap="round" strokeLinejoin="round" d="M5 5a2 2 0 012-2h10a2 2 0 012 2v16l-7-3.5L5 21V5z" />
@@ -81,20 +83,20 @@ export default function SaveButton({ postId }: Props) {
           onClick={() => setShowModal(false)}
         >
           <div
-            className="bg-white rounded-2xl p-6 max-w-sm w-full shadow-xl"
+            className="bg-surface-container-lowest rounded-2xl p-6 max-w-sm w-full shadow-float"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="text-center mb-4">
               <div className="text-3xl mb-2">🔖</div>
-              <h3 className="text-[16px] font-bold text-gray-800 mb-1">投稿を保存しますか？</h3>
-              <p className="text-[12px] text-gray-500 leading-relaxed">
+              <h3 className="text-base font-bold text-on-surface mb-1 font-headline">投稿を保存しますか？</h3>
+              <p className="text-sm text-on-surface-variant leading-relaxed">
                 マイページに登録すると、気になった投稿を保存して後で見返せます。
                 登録は無料・Googleアカウントで数秒で完了します。
               </p>
             </div>
             <button
               onClick={loginWithGoogle}
-              className="w-full py-2.5 border border-gray-200 rounded-xl text-[13px] text-gray-600 hover:bg-gray-50 transition-colors flex items-center justify-center gap-2 mb-2"
+              className="w-full py-3 min-h-[44px] border border-outline-variant rounded-xl text-sm text-on-surface hover:bg-surface-container transition-colors flex items-center justify-center gap-2 mb-2 focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2"
             >
               <svg className="w-4 h-4" viewBox="0 0 24 24">
                 <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92a5.06 5.06 0 01-2.2 3.32v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.1z" fill="#4285F4"/>
@@ -107,20 +109,20 @@ export default function SaveButton({ postId }: Props) {
             <div className="flex gap-2 mb-3">
               <Link
                 href="/auth/login"
-                className="flex-1 py-2 border border-gray-200 rounded-xl text-[13px] text-gray-600 hover:bg-gray-50 transition-colors text-center"
+                className="flex-1 py-2.5 min-h-[44px] flex items-center justify-center border border-outline-variant rounded-xl text-sm text-on-surface hover:bg-surface-container transition-colors text-center"
               >
                 メールでログイン
               </Link>
               <Link
                 href="/auth/signup"
-                className="flex-1 py-2 bg-teal-600 hover:bg-teal-700 rounded-xl text-[13px] text-white font-semibold transition-colors text-center"
+                className="flex-1 py-2.5 min-h-[44px] flex items-center justify-center bg-primary hover:bg-primary/90 rounded-xl text-sm text-on-primary font-semibold transition-colors text-center"
               >
                 新規登録
               </Link>
             </div>
             <button
               onClick={() => setShowModal(false)}
-              className="w-full text-[12px] text-gray-400 hover:text-gray-600 transition-colors"
+              className="w-full text-sm text-on-surface-variant hover:text-on-surface transition-colors py-2"
             >
               今はしない
             </button>
