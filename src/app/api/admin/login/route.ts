@@ -6,7 +6,8 @@ const sha = (s: string) => createHash('sha256').update(s).digest();
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 export async function POST(req: Request) {
-  const expected = process.env.ADMIN_PASSWORD;
+  // trim: Vercel env values set via `echo` carry a trailing newline
+  const expected = process.env.ADMIN_PASSWORD?.trim();
   if (!expected) return NextResponse.json({ error: '管理画面は無効です' }, { status: 503 });
 
   const body = await req.json().catch(() => ({}));

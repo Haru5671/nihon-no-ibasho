@@ -10,7 +10,7 @@ function hex(buf: ArrayBuffer) {
   return Array.from(new Uint8Array(buf)).map((b) => b.toString(16).padStart(2, '0')).join('');
 }
 async function key(secret: string) {
-  const raw = await crypto.subtle.digest('SHA-256', enc(`${secret}|ibasho-admin-session`));
+  const raw = await crypto.subtle.digest('SHA-256', enc(`${secret.trim()}|ibasho-admin-session`));
   return crypto.subtle.importKey('raw', raw, { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
 }
 async function sign(secret: string, payload: string) {
