@@ -1,19 +1,28 @@
 import { NextResponse } from 'next/server';
+import { createHash, timingSafeEqual } from 'crypto';
+import { ADMIN_COOKIE, ADMIN_TTL_SEC, issueAdminToken } from '@/lib/admin/session';
+
+const sha = (s: string) => createHash('sha256').update(s).digest();
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 export async function POST(req: Request) {
-  const { password } = await req.json();
   const expected = process.env.ADMIN_PASSWORD;
+  if (!expected) return NextResponse.json({ error: '管理画面は無効です' }, { status: 503 });
 
-  if (!expected || password !== expected) {
+  const body = await req.json().catch(() => ({}));
+  const password = typeof body?.password === 'string' ? body.password : '';
+
+  if (!timingSafeEqual(sha(password), sha(expected))) {
+    await sleep(800);
     return NextResponse.json({ error: 'パスワードが違います' }, { status: 401 });
   }
 
   const res = NextResponse.json({ ok: true });
-  res.cookies.set('admin_token', expected, {
+  res.cookies.set(ADMIN_COOKIE, await issueAdminToken(expected), {
     httpOnly: true,
     secure: process.env.NODE_ENV === 'production',
     sameSite: 'lax',
-    maxAge: 60 * 60 * 24 * 7, // 7 days
+    maxAge: ADMIN_TTL_SEC,
     path: '/',
   });
   return res;
@@ -21,6 +30,7 @@ export async function POST(req: Request) {
 
 export async function DELETE() {
   const res = NextResponse.json({ ok: true });
+  res.cookies.delete(ADMIN_COOKIE);
   res.cookies.delete('admin_token');
   return res;
 }

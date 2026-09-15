@@ -2,6 +2,9 @@ import { createClient } from '@supabase/supabase-js';
 import Link from 'next/link';
 import AdminLogout from './AdminLogout';
 import { AI_BODIES } from '@/data/aiPosts';
+import { cookies } from 'next/headers';
+import { redirect } from 'next/navigation';
+import { ADMIN_COOKIE, verifyAdminToken } from '@/lib/admin/session';
 
 export const dynamic = 'force-dynamic';
 
@@ -214,6 +217,10 @@ async function getStats() {
 type ViewTab = 'all' | 'human' | 'ai';
 
 export default async function AdminPage({ searchParams }: { searchParams?: { view?: string } }) {
+  // Defense in depth: middleware already gates /admin, verify again here.
+  const authed = await verifyAdminToken(cookies().get(ADMIN_COOKIE)?.value, process.env.ADMIN_PASSWORD);
+  if (!authed) redirect('/admin/login');
+
   const rawView = searchParams?.view;
   const view: ViewTab = rawView === 'human' || rawView === 'ai' ? rawView : 'all';
   const s = await getStats();
@@ -238,6 +245,7 @@ export default async function AdminPage({ searchParams }: { searchParams?: { vie
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
           <span style={{ color: '#484f58', fontSize: '11px' }}>{now}</span>
+          <Link href="/admin/koukai" style={{ color: '#f472b6', fontSize: '11px', textDecoration: 'none' }}>KO-KAI →</Link>
           <Link href="/" style={{ color: '#00d4ff', fontSize: '11px', textDecoration: 'none' }}>← サイトへ</Link>
           <AdminLogout />
         </div>
